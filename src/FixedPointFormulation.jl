@@ -1,7 +1,6 @@
 export bigR
 export deltaF
 export ao_denominator
-export ao_preconditioner
 export ao_amps
 
 function bigR(int::Integrals, coulombint::CoulombIntegrals, slice::Slices)
@@ -73,15 +72,7 @@ function ao_denominator(fd::FockDiagOffs, nbasis)
     return denom
 end
 
-function ao_preconditioner(denom)
-    denom_shape = size(denom)
-    return v -> begin
-        v_tensor = reshape(v, denom_shape)
-        vec(v_tensor ./ denom)
-    end
-end
-
-function ao_amps(int::Integrals, elt::FixedPointElements, slice::Slices, epsilon)
+function ao_amps(int::Integrals, elt::FixedPointElements, slice::Slices, shift)
     d = int.d  
     R_fun = elt.R       
     delF_fun = elt.ΔF           
@@ -89,8 +80,8 @@ function ao_amps(int::Integrals, elt::FixedPointElements, slice::Slices, epsilon
     
     θ_fun =  theta(slice)
 
-    safe_denom = denom .+ epsilon * sign.(denom)
-    safe_denom[abs.(safe_denom) .< epsilon] .= epsilon
+    safe_denom = denom .+ shift * sign.(denom)
+    safe_denom[abs.(safe_denom) .< shift] .= shift
     
     # regularizer = 1e10 .* (ones(size(safe_denom)))
     return t -> begin

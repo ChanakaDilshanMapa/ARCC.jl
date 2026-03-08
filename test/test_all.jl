@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(AUCC)));
-Molecule = "HF";
+Molecule = "C4H10_4-31g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
