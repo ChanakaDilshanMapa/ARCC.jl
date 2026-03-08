@@ -185,15 +185,6 @@ function compute_jacobian(amp_fun, t_fun, θ_benchmark, purt)
     return J
 end
 
-# function analyze_fixed_point(amp_fun, t_fun, θ_benchmark, purt)
-#     J = compute_jacobian(amp_fun, t_fun, θ_benchmark, purt)
-
-#     eigvals = eigen(J).values
-#     spectral_radius = maximum(abs.(eigvals))
-
-#     return spectral_radius
-# end
-
 
 function estimate_spectral_radius(amp_fun, t_fun, θ_benchmark;
                                   purt=1e-6, maxiter=25, tol=1e-8,
@@ -207,8 +198,7 @@ function estimate_spectral_radius(amp_fun, t_fun, θ_benchmark;
     end
 
     Fθ = F(θ_vec)
-    if v0 === nothing
-        # Deterministic initial direction: all-ones normalized
+    if v0 === nothing        
         v = fill(1.0, length(θ_vec))
         v ./= norm(v)
     else

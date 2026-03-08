@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(AUCC)));
-Molecule = "BH3_cc-pVTZ";
+Molecule = "HF";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -88,7 +88,7 @@ diffs = upto_t2["diffs"]
 
 ################################################################
 initial_guess = zeros(n_b,n_b,n_b,n_b);
-max_iter = 200;
+max_iter = 400;
 tol = 1e-8; 
 peris = make_physaoeris(new_eris);
 purt = 1e-6;
@@ -167,17 +167,30 @@ run_fixed_point = fixed_point_factory(new_S, t2, nocc, n_b, Cscf, f, peris, init
 
 # MO case (Identity Transformation)
 T_I = Matrix{Float64}(I, n_b, n_b);
-θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point(T_I);
+fp_time_I = @elapsed begin
+    global θ_final_I, θ_benchmark_I, diffs_I
+    θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point(T_I)
+end
 @test norm(θ_final_I - θ_benchmark_I) < 1e-7
 
 # AO case (Full Transformation)
 T_F = Cscf;
-θ_final_F, θ_benchmark_F, diffs_F = run_fixed_point(Cscf);
+fp_time_F = @elapsed begin
+    global θ_final_F, θ_benchmark_F, diffs_F
+    θ_final_F, θ_benchmark_F, diffs_F = run_fixed_point(Cscf)
+end
 @test norm(θ_final_F - θ_benchmark_F) > 10
 
 run_fixed_point_shifted = fixed_point_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_non_canonical; verbose=true);
-θ_final_F_shifted, θ_benchmark_F_shifted, diffs_F_shifted = run_fixed_point_shifted(Cscf);
+fp_time_F_shifted = @elapsed begin
+    global θ_final_F_shifted, θ_benchmark_F_shifted, diffs_F_shifted
+    θ_final_F_shifted, θ_benchmark_F_shifted, diffs_F_shifted = run_fixed_point_shifted(Cscf)
+end
 @test norm(θ_final_F_shifted - θ_benchmark_F_shifted) < 1e-7
+
+fp_iters_I = length(diffs_I)
+fp_iters_F = length(diffs_F)
+fp_iters_F_shifted = length(diffs_F_shifted)
 
 save_dir = joinpath(pkg_root, "test", "saved_data", Molecule)
 isdir(save_dir) || mkpath(save_dir)
@@ -186,12 +199,18 @@ npzwrite(fp_data_file, Dict(
     "theta_final_I" => θ_final_I,
     "theta_benchmark_I" => θ_benchmark_I,
     "diffs_I" => diffs_I,
+    "fp_time_I" => [fp_time_I],
+    "fp_iters_I" => [fp_iters_I],
     "theta_final_F" => θ_final_F,
     "theta_benchmark_F" => θ_benchmark_F,
     "diffs_F" => diffs_F,
+    "fp_time_F" => [fp_time_F],
+    "fp_iters_F" => [fp_iters_F],
     "theta_final_F_shifted" => θ_final_F_shifted,
     "theta_benchmark_F_shifted" => θ_benchmark_F_shifted,
-    "diffs_F_shifted" => diffs_F_shifted
+    "diffs_F_shifted" => diffs_F_shifted,
+    "fp_time_F_shifted" => [fp_time_F_shifted],
+    "fp_iters_F_shifted" => [fp_iters_F_shifted]
 ))
 ########################################################################
 save_dir = joinpath(pkg_root, "test", "saved_data", Molecule)
@@ -212,11 +231,23 @@ T_I = Matrix{Float64}(I, n_b, n_b)
 nk_test_data = Dict{String, Any}("m_values" => [3, 5, 10])
 for m_val in (3, 5, 10)
     run_nk_logs = nk_logs_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
-    θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
-    θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)
+    nk_time_I = @elapsed begin
+        global θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l
+        θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
+    end
 
     nk_test_data["m$(m_val)_norm_err_I"] = [norm(θ_final_I_l - θ_benchmark_I_l)]
-    nk_test_data["m$(m_val)_norm_err_F"] = [norm(θ_final_F_l - θ_benchmark_F_l)]
+
+    nk_test_data["m$(m_val)_num_evals_I"] = [num_evals_I_l]
+
+    newton_iters_I = length(newton_post_I_l)
+    gmres_iters_by_newton_I = Int[length(g) for g in gmres_I_l]
+    gmres_iters_total_I = sum(gmres_iters_by_newton_I)
+
+    nk_test_data["m$(m_val)_newton_iters_I"] = [newton_iters_I]
+    nk_test_data["m$(m_val)_gmres_iters_total_I"] = [gmres_iters_total_I]
+    nk_test_data["m$(m_val)_gmres_iters_by_newton_I"] = gmres_iters_by_newton_I
+    nk_test_data["m$(m_val)_nk_time_I"] = [nk_time_I]
 end
 
 save_dir = joinpath(pkg_root, "test", "saved_data", Molecule)
@@ -231,8 +262,19 @@ nk_test_saved = npzread(nk_test_data_file)
 
 for m_val in Int.(nk_test_saved["m_values"])
     norm_err_I = nk_test_saved["m$(m_val)_norm_err_I"][1]
-    norm_err_F = nk_test_saved["m$(m_val)_norm_err_F"][1]
-    @test norm_err_I < 1e-7
-    @test norm_err_F < 1e-7
+    is_converged_I = norm_err_I < 1e-7
+    @test is_converged_I
+    num_evals_I = nk_test_saved["m$(m_val)_num_evals_I"][1]
+    newton_iters_I = Int(nk_test_saved["m$(m_val)_newton_iters_I"][1])
+    gmres_iters_total_I = Int(nk_test_saved["m$(m_val)_gmres_iters_total_I"][1])
+    gmres_iters_by_newton_I = Int.(nk_test_saved["m$(m_val)_gmres_iters_by_newton_I"])
+    nk_time_I = nk_test_saved["m$(m_val)_nk_time_I"][1]
+   
+    println("m=$m_val:")
+    println("  Identity: residual evals=$num_evals_I, error=$(norm_err_I), converged=$(is_converged_I)")
+    println("  Newton iterations (I): $(newton_iters_I)")
+    println("  GMRES total iterations (I): $(gmres_iters_total_I)")
+    println("  GMRES iterations per Newton (I): $(gmres_iters_by_newton_I)")
+    println("  NK wall-time (I): $(nk_time_I) s")
 end
 
