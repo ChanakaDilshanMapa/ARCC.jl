@@ -30,5 +30,6 @@ include("Optimizers.jl")
 
 # This contains helper functions to make test files less verbose
 include("Factory.jl")
+include("Preconditoner.jl")
 
 end 

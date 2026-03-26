@@ -72,6 +72,8 @@ function ao_denominator(fd::FockDiagOffs, nbasis)
     return denom
 end
 
+
+
 function ao_amps(int::Integrals, elt::FixedPointElements, slice::Slices, shift)
     d = int.d  
     R_fun = elt.R       

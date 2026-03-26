@@ -42,6 +42,7 @@ fock_mo = Cscf' * f * Cscf;
 t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fock_mo, 300, 1e-13, true);
 
 ################################################################
+# initial_guess = zeros(nocc, nocc, nvir, nvir);
 initial_guess = zeros(n_b,n_b,n_b,n_b);
 max_iter = 200;
 tol = 1e-8; 
@@ -50,21 +51,13 @@ purt = 1e-6;
 shift_canonical = 1e-8;
 max_outer_nk = 200;
 
-rho_of_eps = function (eps::Float64)
-    run_anal = analyzer_factory(new_S, t2, nocc, n_b, Cscf, f, peris, purt, eps)
-    _, spec_r = run_anal(Cscf)
-    return spec_r
-end
 
-res_opt = Optim.optimize(rho_of_eps, 0.0, 10.0, Optim.Brent())
-eps_min_cont = Optim.minimizer(res_opt)
-rho_min_cont = Optim.minimum(res_opt)
-
-shift_non_canonical = eps_min_cont
-function pre_newton_krylov(
-    θ::Array{Float64,4},
-    residual_fun::Function,
-    elt::FixedPointElements,shift;
+function new_newton_krylov(
+    θ::Array{Float64, 4},
+    residual_fun::Function;
+    fock_mo,
+    nocc,
+    nvir,
     tol=1e-8,
     max_outer=300,
     m=5,
@@ -72,18 +65,9 @@ function pre_newton_krylov(
     η=0.1
 )
 
-    denom = elt.denom
-
-    epsilon = shift
-    safe_denom = denom .+ epsilon * sign.(denom)
-    safe_denom[abs.(safe_denom) .< epsilon] .= epsilon
-
-    # safe_denom = M
-
     θ_shape = size(θ)
+    println("θ_shape: ", θ_shape)
     n = prod(θ_shape)
-
-    denom_vec = vec(safe_denom)   # flatten denominator for vector operations
 
     num_residual_evals = Ref(0)
 
@@ -93,25 +77,16 @@ function pre_newton_krylov(
         return vec(residual_fun(θ_tensor))
     end
 
-    # Jacobian-vector product
-    function Jv(θ_vec::Vector{Float64}, r::Vector{Float64}, v::Vector{Float64})
-        δ = sqrt(eps(Float64)) * (1 + norm(θ_vec)) / max(norm(v), 1e-12)
-        return (vec_residual(θ_vec .+ δ .* v) .- r) ./ δ
-    end
-
-    # Preconditioned Jacobian-vector product
-    function PJv(θ_vec, r, v)
-        return Jv(θ_vec, r, v) ./ denom_vec
+    function Jv(v::Vector{Float64})
+        Δt = reshape(v, θ_shape)
+        Jv_tensor = newfunc(fock_mo, Δt, nocc, nvir)
+        return vec(Jv_tensor)
     end
 
     θ_vec = vec(copy(θ))
     r = vec_residual(θ_vec)
-
-    # Apply preconditioner to residual
-    r̃ = r ./ denom_vec
-    normr = norm(r̃)
-
-    verbose && println("NK: initial ||M⁻¹r|| = $normr")
+    normr = norm(r)
+    verbose && println("NK: initial ||r|| = $normr")
 
     k = 0
     total_inner = 0
@@ -120,58 +95,70 @@ function pre_newton_krylov(
         β = normr
         V = zeros(n, m+1)
         H = zeros(m+1, m)
-        V[:,1] .= r̃ / β
-        verbose && println("Newton iter $k: ||M⁻¹r|| = $normr")
+
+        V[:,1] .= r / β
+        verbose && println("Newton iter $k: ||r|| = $normr")
+
         inner = 0
+
         for j = 1:m
-            w = PJv(θ_vec, r, V[:,j])
+            w = Jv(V[:,j])   
+
             for i = 1:j
                 H[i,j] = dot(V[:,i], w)
                 w .-= H[i,j] * V[:,i]
             end
+
             H[j+1,j] = norm(w)
             if H[j+1,j] < tol
                 break
             end
+
             V[:,j+1] .= w / H[j+1,j]
-            Hj = H[1:j+1,1:j]
+
+            Hj = H[1:j+1, 1:j]
             e1 = zeros(j+1); e1[1] = β
             resid_inner = norm(Hj * (Hj \ e1) - e1)
+
             verbose && println("  GMRES $j: inner = $resid_inner")
             inner += 1
+
+            # Eisenstat-Walker stopping
             if resid_inner <= η * β
-                verbose && println("  GMRES stopping criterion satisfied")
+                verbose && println("  GMRES stopping criterion satisfied: $resid_inner <= $(η * β)")
                 break
             end
         end
+
         total_inner += inner
+
         jmax = findlast(!iszero, sum(abs.(H), dims=1))[2]
         Hj = H[1:jmax+1, 1:jmax]
         e1 = zeros(jmax+1); e1[1] = β
+
         s = Hj \ e1
         Δθ = -V[:,1:jmax] * s
+
         θ_vec .+= Δθ
         r = vec_residual(θ_vec)
-        r̃ = r ./ denom_vec
-        normr = norm(r̃)
+        normr = norm(r)
 
         k += 1
     end
 
     if normr <= tol
-        verbose && println("Converged in $k Newton and $total_inner GMRES iterations.")
+        verbose && println("Converged in $k Newton and $total_inner GMRES iterations. Final ||r|| = $normr")
     else
-        verbose && println("Did NOT converge.")
+        verbose && println("Did NOT converge in $k Newton and $total_inner GMRES iterations. Final ||r|| = $normr")
     end
 
     verbose && println("Total residual evaluations: $(num_residual_evals[])")
 
     θ_final = reshape(θ_vec, θ_shape)
-
     return θ_final, num_residual_evals[]
 end
 
-function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer, tol, m,shift)
+function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer, tol, m, fock_mo, nvir )
     return function (T)
         Tbar = T_bar(T, new_S)
         slice = make_slices(Cscf, T, Tbar, nocc, n_b)
@@ -179,12 +166,8 @@ function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max
         int = make_integrals(proj, peris)
         fop = make_fock_operators(proj, f)
 
-        # M_fun = preconditioner(fop, slice)
-        # M = M_fun(t2)  # Call the preconditioner function with MO amplitudes to get the matrix
-
         coulomint = make_coulomb_integrals(int, slice)
         fd = make_fock_diags_and_offs(fop)
-        elt = make_fixed_point_elements(int, coulomint, slice, fd, n_b)
 
         # Get function generators
         j_fun = j_integralθ(int)
@@ -205,29 +188,20 @@ function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max
 
         θ_benchmark = theta(slice)(t2)
 
-        θ_final, num_residual_evals = pre_newton_krylov(initial_guess, build_residual, elt,shift; 
-        tol=tol, max_outer=max_outer, m=m, verbose=true)
+        θ_final, num_residual_evals = new_newton_krylov(initial_guess, build_residual; 
+            fock_mo=fock_mo, nocc=nocc, nvir=nvir, tol=tol, max_outer=max_outer, m=m, verbose=true)
         return θ_final, θ_benchmark, num_residual_evals
     end
 end
 
 T_I = Matrix{Float64}(I, n_b, n_b)
 
-run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5,shift_non_canonical)
+run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5, fock_mo,nvir)
 
 θ_final_I_l, θ_benchmark_I_l, num_evals_I_l = run_nk(T_I);
 
 
-T_I = Matrix{Float64}(I, n_b, n_b)
-nk_test_data = Dict{String, Any}("m_values" => [5])
-for m_val in (10)
-    run_nk_logs = nk_logs_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
-    θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
-    θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)
 
-    nk_test_data["m$(m_val)_norm_err_I"] = [norm(θ_final_I_l - θ_benchmark_I_l)]
-    nk_test_data["m$(m_val)_norm_err_F"] = [norm(θ_final_F_l - θ_benchmark_F_l)]
-end
 
 
 

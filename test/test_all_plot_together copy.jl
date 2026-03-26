@@ -130,7 +130,7 @@ npzwrite(best_shift, Dict(
 save_dir = joinpath(pkg_root, "test", "saved_data", "plotting_data", Molecule)
 best_shift = joinpath(save_dir, "best_shift_finder_$(Molecule).npz")
 best_shift_data = npzread(best_shift)
-eps_min_cont = best_shift_data["eps_min_cont"][1]
+eps_min_cont = best_shift_daata["eps_min_cont"][1]
 rho_min_cont = best_shift_data["rho_min_cont"][1]
 shift_non_canonical = best_shift_data["shift_non_canonical"][1]
 eps_min_cont_canonical = best_shift_data["eps_min_cont_canonical"][1]
@@ -437,6 +437,68 @@ pdf_all = joinpath(fig_dir, "convergence_all_in_one_$(Molecule).pdf")
 savefig(p_all, pdf_all)
 svg_all = joinpath(fig_dir, "convergence_all_in_one_$(Molecule).svg")
 savefig(p_all, svg_all)
+
+# Fixed-point only plot (MO + AO), excluding shifted AO case
+p_fp_ao_only = plot(
+    xlabel="\nnumber of residual evaluations\n",
+    ylabel="\nresidual norm\n",
+    title="Ethane (6-31G)\n",
+    yscale=:log10,
+    legend=:topright,
+    linewidth=5,
+    grid=true,
+    gridlinewidth=1.5,
+    gridcolor=:gray40,
+    gridalpha=0.6,
+    size=(1200, 800),
+    titlefont=font(36, "Computer Modern"),
+    guidefont=font(36, "Computer Modern"),
+    tickfont=font(24, "Computer Modern"),
+    legendfont=font(24, "Computer Modern"),
+    top_margin=16Plots.mm,
+    bottom_margin=10Plots.mm,
+    left_margin=10Plots.mm,
+    right_margin=10Plots.mm,
+)
+
+plot!(
+    p_fp_ao_only, start_idx:length(diffs_I), diffs_I[start_idx:end],
+    label="", color=:darkgreen, linestyle=:dash, linewidth=5,
+)
+plot!(
+    p_fp_ao_only, start_idx:length(diffs_F), diffs_F[start_idx:end],
+    label="", color=:magenta, linestyle=:dash, linewidth=5,
+)
+
+# Proxy legend handles: keep legend samples solid while plotted curves remain dashed.
+plot!(p_fp_ao_only, [NaN], [NaN], label="FP MO basis", color=:darkgreen, linestyle=:solid, linewidth=3)
+plot!(p_fp_ao_only, [NaN], [NaN], label="FP AO basis", color=:magenta, linestyle=:solid, linewidth=3)
+
+fp_only_series = Float64[]
+append!(fp_only_series, filter(y -> isfinite(y) && y > 0, diffs_I[start_idx:end]))
+append!(fp_only_series, filter(y -> isfinite(y) && y > 0, diffs_F[start_idx:end]))
+fp_only_max_x = max(length(diffs_I), length(diffs_F))
+
+if !isempty(fp_only_series)
+    sorted_vals = sort(fp_only_series)
+    n_vals = length(sorted_vals)
+    idx_lo = max(1, floor(Int, 0.01 * n_vals))
+    idx_hi = max(1, ceil(Int, 0.99 * n_vals))
+    y_min = max(sorted_vals[idx_lo] / 5, 1e-8)
+    y_max = sorted_vals[idx_hi] * 5
+    lo_exp = floor(Int, log10(y_min))
+    hi_exp = ceil(Int, log10(y_max))
+    tick_step = max(1, ceil(Int, (hi_exp - lo_exp) / 10))
+    yticks_vals = 10.0 .^ collect(lo_exp:tick_step:hi_exp)
+    plot!(p_fp_ao_only; ylims=(y_min, y_max), xlims=(0, fp_only_max_x * 1.25), yticks=yticks_vals)
+else
+    plot!(p_fp_ao_only; xlims=(0, fp_only_max_x * 1.25))
+end
+
+pdf_fp_only = joinpath(fig_dir, "convergence_fp_ao_only_$(Molecule).pdf")
+savefig(p_fp_ao_only, pdf_fp_only)
+svg_fp_only = joinpath(fig_dir, "convergence_fp_ao_only_$(Molecule).svg")
+savefig(p_fp_ao_only, svg_fp_only)
 ################################################################
 epsilon = 1e-2 .* 2.0 .^(0:15)
 
