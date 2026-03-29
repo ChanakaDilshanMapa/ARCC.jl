@@ -1,6 +1,6 @@
-using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random
+using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random
 
-pkg_root = dirname(dirname(pathof(AUCC)));
+pkg_root = dirname(dirname(pathof(ARCC)));
 base_dir = joinpath(pkg_root, "test/pyscf_data/LiH_sto-3g");
 
 files = Dict(
@@ -41,7 +41,7 @@ fock_mo = Cscf' * f * Cscf;
 t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fock_mo, 300, 1e-14, true);
 ################################################################
 peris = make_physaoeris(new_eris);
-run_auccd = auccd_factory(new_S, t2, nocc, n_b, Cscf, f, peris);
+run_auccd = arccd_factory(new_S, t2, nocc, n_b, Cscf, f, peris);
 
 # MO case (Identity Transformation)
 T_I = Matrix{Float64}(I, n_b, n_b);

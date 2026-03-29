@@ -1,6 +1,6 @@
-using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
+using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
-pkg_root = dirname(dirname(pathof(AUCC)));
+pkg_root = dirname(dirname(pathof(ARCC)));
 Molecule = "C5H12_3-21g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 

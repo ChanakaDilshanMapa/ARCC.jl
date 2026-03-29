@@ -1,6 +1,6 @@
-using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LinearMaps, Arpack
+using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LinearMaps, Arpack
 
-pkg_root = dirname(dirname(pathof(AUCC)));
+pkg_root = dirname(dirname(pathof(ARCC)));
 base_dir = joinpath(pkg_root, "test/pyscf_data/LiH_sto-3g");
 
 files = Dict(

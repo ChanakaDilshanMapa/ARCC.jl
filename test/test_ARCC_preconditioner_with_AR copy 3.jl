@@ -1,7 +1,7 @@
 using Revise, IterativeSolvers, LinearOperators 
-using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
+using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
-pkg_root = dirname(dirname(pathof(AUCC)));
+pkg_root = dirname(dirname(pathof(ARCC)));
 Molecule = "C2H6_6-31g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
@@ -254,7 +254,7 @@ function Precond_newton_krylov(
 
     θ_final = reshape(θ_vec, θ_shape)
 
-    return θ_final, num_residual_evals[]
+    return θ_final, num_residual_evals[] -1
 end
 
 function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris,

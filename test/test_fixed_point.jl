@@ -1,6 +1,6 @@
-using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings
+using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings
 
-pkg_root = dirname(dirname(pathof(AUCC)));
+pkg_root = dirname(dirname(pathof(ARCC)));
 base_dir = joinpath(pkg_root, "test/pyscf_data/H2O_Water_cc-pvtz");
 
 files = Dict(

@@ -1,6 +1,6 @@
 export g_o
 export g_v
-export au_ccd_eqns
+export ar_ccd_eqns
 
 function g_o(fop::FockOperators, int::Integrals)
     F_o = fop.Fo
@@ -25,7 +25,7 @@ function g_v(fop::FockOperators, int::Integrals)
 end
 
 
-function au_ccd_eqns(int::Integrals, j, k , G_o, G_v)
+function ar_ccd_eqns(int::Integrals, j, k , G_o, G_v)
     a = int.a
     b = int.b
     d = int.d
@@ -66,11 +66,9 @@ function au_ccd_eqns(int::Integrals, j, k , G_o, G_v)
     end    
 end
 
+export mo2ar_eqns
 
-
-export mo2au_eqns
-
-function mo2au_eqns(ZMO, slice::Slices)    
+function mo2ar_eqns(ZMO, slice::Slices)    
     Tbarocc, Tbarvir = slice.Tbarocc, slice.Tbarvir
 
     @tensor temp_1[mu,j,a,b]         := Tbarocc[mu,i]      * ZMO[i,j,a,b]
@@ -78,7 +76,7 @@ function mo2au_eqns(ZMO, slice::Slices)
 	@tensor temp_3[mu,nu,lambda,b]   := Tbarvir[lambda,a]  * temp_2[mu,nu,a,b] 
 	@tensor ZAU[mu,nu,lambda,sigma]  := Tbarvir[sigma,b]   * temp_3[mu,nu,lambda,b] 
 
-    return ZAU
+    return ZAR
 end
 
 

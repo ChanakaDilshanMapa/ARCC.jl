@@ -1,6 +1,6 @@
-using AUCC, NPZ, Glob, Test, LinearAlgebra, Einsum
+using ARCC, NPZ, Glob, Test, LinearAlgebra, Einsum
 
-pkg_root = dirname(dirname(pathof(AUCC)))
+pkg_root = dirname(dirname(pathof(ARCC)))
 base_dir = joinpath(pkg_root, "test/pyscf_data/equi_geom")
 
 files = Dict(               

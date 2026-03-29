@@ -1,4 +1,6 @@
-module AUCC
+# This file was renamed from AUCC.jl to ARCC.jl as part of the package rename process.
+# Please update all references to AUCC to ARCC in your codebase.
+module ARCC
 
 using LinearAlgebra, Printf
 using Einsum  
@@ -16,7 +18,7 @@ using Arpack
 include("Structs.jl")
 include("Constructors.jl")
 
-# Files correconding "AUCC"
+# Files corresponding "ARCC"
 include("Slices.jl")
 include("Projectors.jl")
 include("Orthogonal.jl")
@@ -24,12 +26,16 @@ include("Integrals..jl")
 include("Fock.jl")
 include("Theta.jl")
 include("Energy.jl")
-include("AUCCDeqns.jl")
+include("ARCCDeqns.jl")
 include("FixedPointFormulation.jl")
-include("Optimizers.jl")
+include("SpectralAnalyzer.jl")
+include("UsingNLsolve.jl")
+include("FPIteration.jl")
+include("NKSolvers.jl")
+include("Preconditoner.jl")
+include("PreconditionedNKSolvers.jl")
 
 # This contains helper functions to make test files less verbose
-include("Factory.jl")
-include("Preconditoner.jl")
+include("ARCCFactory.jl")
 
 end 
