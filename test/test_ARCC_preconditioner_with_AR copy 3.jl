@@ -1,3 +1,57 @@
+using Revise, IterativeSolvers, LinearOperators 
+using Test, GTO, WTP, LinearAlgebra, AUCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
+
+pkg_root = dirname(dirname(pathof(AUCC)));
+Molecule = "C2H6_6-31g";
+base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
+
+files = Dict(
+    "n_occ_pyscf"          => glob("nocc*.npy", base_dir)[1],
+    "S_pyscf"              => glob("overlap_matrix*.npy", base_dir)[1],
+    "C_pyscf"              => glob("MO_coefficients*.npy", base_dir)[1],    
+    "fock_ao_pyscf"        => glob("Fock_matrix*.npy", base_dir)[1],    
+    "mo_eris_pyscf"        => glob("MO_ERIs*.npy", base_dir)[1],   
+    "amp_ccd_pyscf"        => glob("t2_updated*.npy", base_dir)[1],
+    "T_pyscf"              => glob("kinetic_energy_matrix*.npy", base_dir)[1],
+    "V_en_pyscf"           => glob("nuclear_potential_matrix*.npy", base_dir)[1],    
+    "ao_eris_pyscf"        => glob("ERI*.npy", base_dir)[1],
+    "corr_ene_pyscf"       => glob("ccd_corr_energy*.npy", base_dir)[1],
+);
+
+T               = npzread(files["T_pyscf"]);
+A               = npzread(files["V_en_pyscf"]);
+eris            = npzread(files["ao_eris_pyscf"]);
+nocc            = npzread(files["n_occ_pyscf"]); 
+S               = npzread(files["S_pyscf"]);
+C_pyscf         = npzread(files["C_pyscf"]);
+fock_ao_pyscf   = npzread(files["fock_ao_pyscf"]);
+mo_eris_pyscf   = npzread(files["mo_eris_pyscf"]);
+corr_ene_pyscf  = npzread(files["corr_ene_pyscf"]);
+
+n_b = size(S, 1);
+new_S, new_T, new_A, new_eris = orthogonalize(S, T, A, eris);
+Cscf, mo_energies__SCF = compute_C_SCF_method(nocc, new_S, new_T, new_A, new_eris, 1000, 1e-13, 1);
+mo_eris = ao2mo_eris(new_eris, Cscf);
+
+D = compute_Density_matrix(nocc, Cscf);
+f = compute_Fock_matrix(new_T, new_A, new_eris, D);
+
+nvir = n_b - nocc;
+initial_guess_mo = zeros(nocc, nocc, nvir, nvir);
+fock_mo = Cscf' * f * Cscf;
+
+t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fock_mo, 300, 1e-13, true);
+
+################################################################
+initial_guess = zeros(n_b,n_b,n_b,n_b);
+max_iter = 200;
+tol = 1e-8; 
+peris = make_physaoeris(new_eris);
+purt = 1e-6;
+shift_canonical = 1e-8;
+max_outer_nk = 200;
+
+
 function P_inv_action(F::FockOperators, θ_shape,y)
     Fo = F.Fo
     Fv = F.Fv
@@ -244,3 +298,16 @@ function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris,
         return θ_final, θ_benchmark, num_residual_evals
     end
 end
+
+T_I = Matrix{Float64}(I, n_b, n_b)
+
+run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5)
+
+θ_final_I_l, θ_benchmark_I_l, num_evals_I_l = run_nk(T_I);
+θ_final_Full, θ_benchmark_Full, num_evals_Full = run_nk(Cscf);
+
+
+
+
+
+

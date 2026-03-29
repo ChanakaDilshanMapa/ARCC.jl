@@ -125,8 +125,8 @@ diffs_F_shifted = fp_saved["diffs_F_shifted"]
 
 ########################################################################
 T_I = Matrix{Float64}(I, n_b, n_b)
-nk_test_data = Dict{String, Any}("m_values" => [3, 5, 10])
-for m_val in (3, 5, 10)
+nk_test_data = Dict{String, Any}("m_values" => [5])
+for m_val in (5)
     run_nk_logs = nk_logs_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
     θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
     θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)

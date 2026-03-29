@@ -51,101 +51,102 @@ purt = 1e-6;
 shift_canonical = 1e-8;
 max_outer_nk = 200;
 
-using LinearAlgebra
-using IterativeSolvers
-using LinearMaps
 
+function P_inv_action(F::FockOperators, θ_shape,y)
+    Fo = F.Fo
+    Fv = F.Fv
+    y4d = reshape(y, θ_shape)
+    @tensor Py[μ,ν,λ,σ] := Fv[α,λ] * y4d[μ,ν,α,σ] + Fv[α,σ] * y4d[μ,ν,λ,α] - Fo[μ,α] * y4d[α,ν,λ,σ] - Fo[ν,α] * y4d[μ,α,λ,σ]
+    
+    return vec(Py)
+end
 
-# Standard (non-restarted) GMRES up to maxiter
-function gmres_matvec(A_mul, b; x0=zeros(eltype(b), length(b)), maxiter=20, tol=1e-8, verbose=false)
+function gmres_logged(
+    matvec::Function,
+    b::Vector{Float64};
+    m::Int=20,
+    tol::Float64=1e-8,
+    η::Float64=0.1,
+    verbose::Bool=false
+)
     n = length(b)
-    x = copy(x0)
-    r = b - A_mul(x)
-    β = norm(r)
 
-    if β < tol
-        return x
+    β = norm(b)
+    if β == 0
+        return zeros(n), Float64[], 0
     end
 
-    V = zeros(eltype(b), n, maxiter+1)
-    H = zeros(eltype(b), maxiter+1, maxiter)
-    cs = zeros(eltype(b), maxiter)
-    sn = zeros(eltype(b), maxiter)
-    e1 = zeros(eltype(b), maxiter+1)
+    V = zeros(n, m+1)
+    H = zeros(m+1, m)
 
-    V[:,1] .= r / β
-    e1[1] = β
+    V[:,1] .= b / β
 
-    for j = 1:maxiter
-        w = A_mul(V[:,j])
+    gmres_residuals = Float64[]
+    jmax = 0
+
+    for j = 1:m
+        # Arnoldi
+        w = matvec(V[:,j])
 
         for i = 1:j
             H[i,j] = dot(V[:,i], w)
-            w .-= H[i,j] * V[:,i]
+            w .-= H[i,j] .* V[:,i]
         end
 
         H[j+1,j] = norm(w)
-        if H[j+1,j] ≈ 0
+
+        # (optional breakdown check)
+        if H[j+1,j] < 1e-14
+            jmax = j
             break
         end
 
-        V[:,j+1] .= w / H[j+1,j]
+        V[:,j+1] .= w ./ H[j+1,j]
+        jmax = j
 
-        for i = 1:j-1
-            temp = cs[i]*H[i,j] + sn[i]*H[i+1,j]
-            H[i+1,j] = -sn[i]*H[i,j] + cs[i]*H[i+1,j]
-            H[i,j] = temp
-        end
+        # projected residual
+        Hj = H[1:j+1, 1:j]
+        e1 = zeros(j+1)
+        e1[1] = β
 
-        denom = hypot(H[j,j], H[j+1,j])
-        cs[j] = H[j,j] / denom
-        sn[j] = H[j+1,j] / denom
+        s = Hj \ e1
+        resid_inner = norm(e1 - Hj * s)
 
-        H[j,j] = cs[j]*H[j,j] + sn[j]*H[j+1,j]
-        H[j+1,j] = 0.0
+        push!(gmres_residuals, resid_inner)
 
-        temp = cs[j]*e1[j] + sn[j]*e1[j+1]
-        e1[j+1] = -sn[j]*e1[j] + cs[j]*e1[j+1]
-        e1[j] = temp
+        verbose && println("  GMRES $j: projected residual = $resid_inner")
 
-        if verbose
-            println("iter $j, residual = $(abs(e1[j+1]))")
-        end
-
-        if abs(e1[j+1]) < tol
-            y = H[1:j,1:j] \ e1[1:j]
-            x .+= V[:,1:j] * y
-            return x
+        if resid_inner <= η * β || resid_inner <= tol
+            verbose && println("  GMRES stopping criterion satisfied.")
+            break
         end
     end
 
-    y = H[1:maxiter,1:maxiter] \ e1[1:maxiter]
-    x .+= V[:,1:maxiter] * y
-    return x
-end
+    # solve least squares
+    Hj = H[1:jmax+1, 1:jmax]
+    e1 = zeros(jmax+1)
+    e1[1] = β
 
-function P_inv_action(F::FockOperators, θ_shape)
-    Fo = F.Fo
-    Fv = F.Fv
-    return y -> begin
-        y4d = reshape(y, θ_shape)
-        @tensor Py[μ,ν,λ,σ] := Fv[α,λ] * y4d[μ,ν,α,σ] + Fv[α,σ] * y4d[μ,ν,λ,α] - Fo[μ,α] * y4d[α,ν,λ,σ] - Fo[ν,α] * y4d[μ,α,λ,σ]
-        return vec(Py)
-    end
+    s = Hj \ e1
+    x = V[:,1:jmax] * s
+
+    return x, gmres_residuals, jmax
 end
 
 function Precond_newton_krylov(
-    θ::Array{Float64, 4},
+    θ::Array{Float64,4},
     residual_fun::Function,
     fop;
     tol=1e-8,
     max_outer=300,
-    m,
+    m=20,
     verbose=true,
     η=0.1
 )
 
     θ_shape = size(θ)
+    n = prod(θ_shape)
+
     num_residual_evals = Ref(0)
 
     function vec_residual(θ_vec::Vector{Float64})
@@ -154,62 +155,103 @@ function Precond_newton_krylov(
         return vec(residual_fun(θ_tensor))
     end
 
-    function Jv(θ_vec::Vector{Float64}, r::Vector{Float64})
-        return v -> begin
+    function Jv(θ_vec::Vector{Float64}, r::Vector{Float64}, v::Vector{Float64})
         δ = sqrt(eps(Float64)) * (1 + norm(θ_vec)) / max(norm(v), 1e-12)
-        Jv = (vec_residual(θ_vec .+ δ .* v) .- r) ./ δ
-        return Jv
-        end
+        return (vec_residual(θ_vec .+ δ .* v) .- r) ./ δ
     end
 
     θ_vec = vec(copy(θ))
-    r = vec_residual(θ_vec)
+    r = vec_residual(θ_vec)   
 
-    p_inv_r, history = gmres_matvec(P_inv_action(fop, θ_shape), r; maxiter=m)
+    p_inv_r, _, _ = gmres_logged(
+        y -> P_inv_action(fop, θ_shape, y),
+        r;
+        m=m,
+        tol=tol,
+        η=1.0        
+    )
+
     normr = norm(p_inv_r)
 
     verbose && println("NK: initial ||r|| = $normr")
 
+    newton_residuals_pre  = Float64[]
+    newton_residuals_post = Float64[]
+    gmres_residuals       = Vector{Vector{Float64}}()
+
+    push!(newton_residuals_pre, normr)
+
     k = 0
     total_inner = 0
 
-
     while normr > tol && k < max_outer
-        β = normr
+
         verbose && println("Newton iter $k: ||r|| = $normr")
 
-        inner_tol = η * β
+        function preconditioned_Jv(v)
+            Jv_val = Jv(θ_vec, r, v)
 
-        P_inv_J_action = x -> (x_tilde -> gmres_matvec(P_inv_action(fop, θ_shape), x_tilde; maxiter=m)(Jv(θ_vec, r))(x))
-
-        Δθ, history = gmres_matvec(P_inv_J_action, -p_inv_r; maxiter=m)
-
-        inner = length(history.data)
-        total_inner += inner
-
-        verbose && println("  GMRES iterations: $inner")
-        if inner > 0
-            verbose && println("  Final GMRES residual: $(history.data[end])")
+            P_inv_Jv_val, _, _ = gmres_logged(
+                y -> P_inv_action(fop, θ_shape, y),
+                Jv_val;
+                m=m,
+                tol=tol,
+                η=1.0
+            )
+            return P_inv_Jv_val
         end
+
+        Δθ, gmres_current, jmax_newton = gmres_logged(
+            preconditioned_Jv,
+            -p_inv_r;
+            m=m,
+            tol=tol,
+            η=η,
+            verbose=verbose
+        )
+
+        push!(gmres_residuals, gmres_current)
+        total_inner += jmax_newton
+
         θ_vec .+= Δθ
 
         r = vec_residual(θ_vec)
 
-        p_inv_r, history = gmres_matvec(P_inv_action(fop, θ_shape), r; maxiter=m)
+        p_inv_r, _, _ = gmres_logged(
+            y -> P_inv_action(fop, θ_shape, y),
+            r;
+            m=m,
+            tol=tol,
+            η=1.0        
+        )
+
         normr = norm(p_inv_r)
+
+        push!(newton_residuals_post, normr)
+
+        if normr > tol
+            push!(newton_residuals_pre, normr)
+        end
+
         k += 1
     end
 
     if normr <= tol
-        verbose && println("Converged in $k Newton and $total_inner GMRES iterations. Final ||r|| = $normr")
+        verbose && println("Converged in $k Newton and $total_inner GMRES iterations.")
     else
-        verbose && println("Did NOT converge in $k Newton and $total_inner GMRES iterations. Final ||r|| = $normr")
+        verbose && println("Did NOT converge in $k Newton and $total_inner GMRES iterations.")
     end
 
+    verbose && println("Final ||r|| = $normr")
     verbose && println("Total residual evaluations: $(num_residual_evals[])")
 
     θ_final = reshape(θ_vec, θ_shape)
-    return θ_final, num_residual_evals[]
+
+    return θ_final,
+           newton_residuals_pre,
+           newton_residuals_post,
+           gmres_residuals,
+           num_residual_evals[]
 end
 
 
