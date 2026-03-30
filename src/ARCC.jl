@@ -36,6 +36,6 @@ include("Preconditoner.jl")
 include("PreconditionedNKSolvers.jl")
 
 # This contains helper functions to make test files less verbose
-include("ARCCFactory.jl")
+include("Factory.jl")
 
 end 

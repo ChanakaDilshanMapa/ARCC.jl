@@ -2,7 +2,7 @@ using Revise, IterativeSolvers, LinearOperators
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "C2H6_6-31g";
+Molecule = "LiH_sto3g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -279,7 +279,7 @@ function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris,
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
 
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 

@@ -151,7 +151,7 @@ function nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initi
             k = k_fun(θ)
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -182,7 +182,7 @@ function nk_solver_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, 
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
             
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -221,7 +221,7 @@ function preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, 
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
 
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -265,7 +265,7 @@ function preconditioned_nk_solver_factory(new_S, t2, nocc, n_b, Cscf, f, peris,
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
 
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -310,7 +310,7 @@ function mo_only_preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
             
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -347,7 +347,7 @@ function mo_only_preconditioned_nk_solver_factory(new_S, t2, nocc, n_b, Cscf, f,
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
             
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 

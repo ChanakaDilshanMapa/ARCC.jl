@@ -175,7 +175,7 @@ conclusion_F_shifted = shift_analyzer_data["conclusion_F_shifted"][1]
 spec_radius_F_shifted = shift_analyzer_data["spec_radius_F_shifted"][1]
 
 ################################################################
-run_fixed_point = fixed_point_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
+run_fixed_point = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
 
 # MO case (Identity Transformation)
 T_I = Matrix{Float64}(I, n_b, n_b);
@@ -187,7 +187,7 @@ T_F = Cscf;
 θ_final_F, θ_benchmark_F, diffs_F = run_fixed_point(Cscf);
 @test norm(θ_final_F - θ_benchmark_F) > 10
 
-run_fixed_point_shifted = fixed_point_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_non_canonical; verbose=true);
+run_fixed_point_shifted = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_non_canonical; verbose=true);
 θ_final_F_shifted, θ_benchmark_F_shifted, diffs_F_shifted = run_fixed_point_shifted(Cscf);
 @test norm(θ_final_F_shifted - θ_benchmark_F_shifted) < 1e-7
 
@@ -230,7 +230,7 @@ append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_F_shifted[start_id
 max_x = maximum((max_x, length(diffs_I), length(diffs_F), length(diffs_F_shifted)))
 
 nk_data = Dict{Int, NamedTuple{(:x_I, :combined_I, :x_F, :combined_F), Tuple{Vector{Int}, Vector{Float64}, Vector{Int}, Vector{Float64}}}}()
-pnk_data = Dict{Int, NamedTuple{(:x_I, :combined_I), Tuple{Vector{Int}, Vector{Float64}}}}()
+pnk_data = Dict{Int, NamedTuple{(:x_I, :combined_I, :x_F, :combined_F), Tuple{Vector{Int}, Vector{Float64}, Vector{Int}, Vector{Float64}}}}()
 
 function build_eval_series(newton_pre, gmres_logs)
     combined = Float64[]
@@ -255,33 +255,39 @@ end
 
 ########################################################################
 T_I = Matrix{Float64}(I, n_b, n_b)
+
 for m_val in (3, 5, 10)
-    run_nk_logs = nk_logs_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
-    run_pnk_logs = preconditioned_nk_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val, shift_canonical)
+    run_nk_logs = nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
+    run_pnk_logs = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
 
     θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
     θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)
 
     θ_final_I_lp, θ_benchmark_I_lp, newton_pre_I_lp, newton_post_I_lp, gmres_I_lp, num_evals_I_lp = run_pnk_logs(T_I)
+    θ_final_F_lp, θ_benchmark_F_lp, newton_pre_F_lp, newton_post_F_lp, gmres_F_lp, num_evals_F_lp = run_pnk_logs(Cscf)
 
     @test norm(θ_final_I_l - θ_benchmark_I_l) < 1e-7
     @test norm(θ_final_F_l - θ_benchmark_F_l) < 1e-7
     @test norm(θ_final_I_lp - θ_benchmark_I_lp) < 1e-7
+    @test norm(θ_final_F_lp - θ_benchmark_F_lp) < 1e-7
 
     x_evals_I, combined_I = build_eval_series(newton_pre_I_l, gmres_I_l)
     x_evals_F, combined_F = build_eval_series(newton_pre_F_l, gmres_F_l)
 
     x_evals_Ip, combined_Ip = build_eval_series(newton_pre_I_lp, gmres_I_lp)
+    x_evals_Fp, combined_Fp = build_eval_series(newton_pre_F_lp, gmres_F_lp)
 
     nk_data[m_val] = (x_I=x_evals_I, combined_I=combined_I, x_F=x_evals_F, combined_F=combined_F)
-    pnk_data[m_val] = (x_I=x_evals_Ip, combined_I=combined_Ip)
+    pnk_data[m_val] = (x_I=x_evals_Ip, combined_I=combined_Ip, x_F=x_evals_Fp, combined_F=combined_Fp)
 
     append!(all_series_y, filter(y -> isfinite(y) && y > 0, combined_I))
     append!(all_series_y, filter(y -> isfinite(y) && y > 0, combined_F))
     append!(all_series_y, filter(y -> isfinite(y) && y > 0, combined_Ip))
+    append!(all_series_y, filter(y -> isfinite(y) && y > 0, combined_Fp))
 
-    max_x = maximum((max_x, maximum(x_evals_I), maximum(x_evals_F), maximum(x_evals_Ip)))
+    max_x = maximum((max_x, maximum(x_evals_I), maximum(x_evals_F), maximum(x_evals_Ip), maximum(x_evals_Fp)))
 end
+
 
 save_dir = joinpath(pkg_root, "test", "saved_data", "plotting_data", Molecule)
 nk_data_file = joinpath(save_dir, "nk_results_$(Molecule).npz")
@@ -292,27 +298,37 @@ npzwrite(nk_data_file, Dict(
     "diffs_I" => diffs_I,
     "diffs_F" => diffs_F,
     "diffs_F_shifted" => diffs_F_shifted,
+    # NK MO
     "m3_x_I" => nk_data[3].x_I,
     "m3_combined_I" => nk_data[3].combined_I,
     "m3_x_F" => nk_data[3].x_F,
     "m3_combined_F" => nk_data[3].combined_F,
-    "pm3_x_I" => pnk_data[3].x_I,
-    "pm3_combined_I" => pnk_data[3].combined_I,
     "m5_x_I" => nk_data[5].x_I,
     "m5_combined_I" => nk_data[5].combined_I,
     "m5_x_F" => nk_data[5].x_F,
     "m5_combined_F" => nk_data[5].combined_F,
-    "pm5_x_I" => pnk_data[5].x_I,
-    "pm5_combined_I" => pnk_data[5].combined_I,
     "m10_x_I" => nk_data[10].x_I,
     "m10_combined_I" => nk_data[10].combined_I,
     "m10_x_F" => nk_data[10].x_F,
     "m10_combined_F" => nk_data[10].combined_F,
+    # Preconditioned NK MO
+    "pm3_x_I" => pnk_data[3].x_I,
+    "pm3_combined_I" => pnk_data[3].combined_I,
+    # Preconditioned NK AO
+    "pm3_x_F" => pnk_data[3].x_F,
+    "pm3_combined_F" => pnk_data[3].combined_F,
+    "pm5_x_I" => pnk_data[5].x_I,
+    "pm5_combined_I" => pnk_data[5].combined_I,
+    "pm5_x_F" => pnk_data[5].x_F,
+    "pm5_combined_F" => pnk_data[5].combined_F,
     "pm10_x_I" => pnk_data[10].x_I,
-    "pm10_combined_I" => pnk_data[10].combined_I
+    "pm10_combined_I" => pnk_data[10].combined_I,
+    "pm10_x_F" => pnk_data[10].x_F,
+    "pm10_combined_F" => pnk_data[10].combined_F
 ))
 
 ################################################################
+
 save_dir = joinpath(pkg_root, "test", "saved_data", "plotting_data", Molecule)
 nk_data_file = joinpath(save_dir, "nk_results_$(Molecule).npz")
 nk_saved = npzread(nk_data_file)
@@ -328,9 +344,9 @@ nk_data = Dict(
     10 => (x_I=nk_saved["m10_x_I"], combined_I=nk_saved["m10_combined_I"], x_F=nk_saved["m10_x_F"], combined_F=nk_saved["m10_combined_F"])
 )
 pnk_data = Dict(
-    3 => (x_I=nk_saved["pm3_x_I"], combined_I=nk_saved["pm3_combined_I"]),
-    5 => (x_I=nk_saved["pm5_x_I"], combined_I=nk_saved["pm5_combined_I"]),
-    10 => (x_I=nk_saved["pm10_x_I"], combined_I=nk_saved["pm10_combined_I"])
+    3 => (x_I=nk_saved["pm3_x_I"], combined_I=nk_saved["pm3_combined_I"], x_F=nk_saved["pm3_x_F"], combined_F=nk_saved["pm3_combined_F"]),
+    5 => (x_I=nk_saved["pm5_x_I"], combined_I=nk_saved["pm5_combined_I"], x_F=nk_saved["pm5_x_F"], combined_F=nk_saved["pm5_combined_F"]),
+    10 => (x_I=nk_saved["pm10_x_I"], combined_I=nk_saved["pm10_combined_I"], x_F=nk_saved["pm10_x_F"], combined_F=nk_saved["pm10_combined_F"])
 )
 
 ################################################################
@@ -375,14 +391,15 @@ plot!(
     # marker=:rect, markersize=5, markerstrokecolor=:orange, markerstrokewidth=1.2
 )
 
+
 color_map_mo = Dict(3=>"#9a0707", 5=>"#A8AD00", 10=>"#001BDB")
 color_map_ao = Dict(3=>"#f26161", 5=>"#CBCE65", 10=>"#8080FD")
 color_pmo = "#000000"
+color_pao = :gray
 
 for m_val in (3, 5, 10)
     data = nk_data[m_val]
-    pdata = pnk_data[m_val]
-
+    # NK MO
     plot!(
         p_all, data.x_I, data.combined_I;
         label = "",
@@ -391,6 +408,7 @@ for m_val in (3, 5, 10)
         linewidth = 5,
         dash_pattern="on 1cm off 0.5cm"
     )
+    # NK AO
     plot!(
         p_all, data.x_F, data.combined_F + 10 * 10 .^(-float(data.x_F));
         label = "",
@@ -400,26 +418,39 @@ for m_val in (3, 5, 10)
         dash_pattern="on 1cm off 0.5cm on 0.25 cm off 0.5cm"
     )
 end
-
-pdata_m3 = pnk_data[3]
+# Only plot preconditioned NK (MO and AO) for m=10
+pdata = pnk_data[10]
+# Preconditioned NK MO (m=10)
 plot!(
-    p_all, pdata_m3.x_I, pdata_m3.combined_I;
+    p_all, pdata.x_I, pdata.combined_I;
     label = "",
     color = color_pmo,
     linestyle = :dash,
     linewidth = 5,
     dash_pattern = "on 0.25cm off 0.35cm"
 )
+# Preconditioned NK AO (m=10)
+plot!(
+    p_all, pdata.x_F, pdata.combined_F + 10 * 10 .^(-float(pdata.x_F));
+    label = "",
+    color = color_pao,
+    linestyle = :dash,
+    linewidth = 5,
+    dash_pattern="on 1cm off 0.5cm on 0.25 cm off 0.5cm"
+)
 
 # Proxy legend handles: keep legend samples solid while plotted curves keep their styles.
-plot!(p_all, [NaN], [NaN], label="FP MO basis", color=:darkblue, linestyle=:solid, linewidth=3)
+plot!(p_all, [NaN], [NaN], label="FP MO basis", color=:darkgreen, linestyle=:solid, linewidth=3)
 plot!(p_all, [NaN], [NaN], label="FP AO basis", color=:magenta, linestyle=:solid, linewidth=3)
 plot!(p_all, [NaN], [NaN], label="FP Shifted AO basis", color=:orange, linestyle=:solid, linewidth=3)
 for m_val in (3, 5, 10)
     plot!(p_all, [NaN], [NaN], label="NK MO (m=$(m_val))", color=color_map_mo[m_val], linestyle=:solid, linewidth=3)
     plot!(p_all, [NaN], [NaN], label="NK AO (m=$(m_val))", color=color_map_ao[m_val], linestyle=:solid, linewidth=3)
+    if m_val == 10
+        plot!(p_all, [NaN], [NaN], label="Preconditioned NK (MO)", color=color_pmo, linestyle=:solid, linewidth=3)
+        plot!(p_all, [NaN], [NaN], label="Preconditioned NK (AO)", color=color_pao, linestyle=:solid, linewidth=3)
+    end
 end
-plot!(p_all, [NaN], [NaN], label="Preconditioned NK (MO)", color=color_pmo, linestyle=:solid, linewidth=3)
  
 filtered = filter(y -> isfinite(y) && y > 0, all_series_y)
 if !isempty(filtered)
