@@ -1,5 +1,3 @@
-# This file was renamed from AUCC.jl to ARCC.jl as part of the package rename process.
-# Please update all references to AUCC to ARCC in your codebase.
 module ARCC
 
 using LinearAlgebra, Printf
@@ -37,5 +35,12 @@ include("PreconditionedNKSolvers.jl")
 
 # This contains helper functions to make test files less verbose
 include("Factory.jl")
+
+
+
+include("DIIS.jl")
+
+
+
 
 end 
