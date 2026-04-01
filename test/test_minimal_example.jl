@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "C2H6_6-31g";
+Molecule = "LiH_sto3g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -150,5 +150,24 @@ for m_val in Int.(nk_test_saved["m_values"])
     norm_err_F = nk_test_saved["m$(m_val)_norm_err_F"][1]
     @test norm_err_I < 1e-7
     @test norm_err_F < 1e-7
+end
+
+T_I = Matrix{Float64}(I, n_b, n_b)
+nk_test_data = Dict{String, Any}("m_values" => [5])
+for m_val in (5)
+    run_nk_logs = nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
+    θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
+    # θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)
+
+    nk_test_data["m$(m_val)_norm_err_I"] = [norm(θ_final_I_l - θ_benchmark_I_l)]
+    # nk_test_data["m$(m_val)_norm_err_F"] = [norm(θ_final_F_l - θ_benchmark_F_l)]
+end
+for m_val in (5)
+    run_nk_logs = nk_solver_factory_with_diis_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, m_val)
+    θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, gmres_I_l, num_evals_I_l = run_nk_logs(T_I)
+    # θ_final_F_l, θ_benchmark_F_l, newton_pre_F_l, newton_post_F_l, gmres_F_l, num_evals_F_l = run_nk_logs(Cscf)
+
+    nk_test_data["m$(m_val)_norm_err_I"] = [norm(θ_final_I_l - θ_benchmark_I_l)]
+    # nk_test_data["m$(m_val)_norm_err_F"] = [norm(θ_final_F_l - θ_benchmark_F_l)]
 end
 
