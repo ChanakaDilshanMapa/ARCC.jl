@@ -2,7 +2,7 @@ using Revise, IterativeSolvers, LinearOperators
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "LiH_sto3g";
+Molecule = "H2-CF-6_cc-pvtz";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -30,7 +30,7 @@ corr_ene_pyscf  = npzread(files["corr_ene_pyscf"]);
 
 n_b = size(S, 1);
 new_S, new_T, new_A, new_eris = orthogonalize(S, T, A, eris);
-Cscf, mo_energies__SCF = compute_C_SCF_method(nocc, new_S, new_T, new_A, new_eris, 1000, 1e-13, 1);
+Cscf, mo_energies__SCF = compute_C_SCF_method(nocc, new_S, new_T, new_A, new_eris, 100, 1e-13, 1);
 mo_eris = ao2mo_eris(new_eris, Cscf);
 
 D = compute_Density_matrix(nocc, Cscf);
@@ -301,9 +301,17 @@ end
 
 T_I = Matrix{Float64}(I, n_b, n_b)
 
-run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5)
+run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 10)
 
 θ_final_I_l, θ_benchmark_I_l, num_evals_I_l = run_nk(T_I);
+Tbar_I = T_bar(T_I, new_S)
+slice_I = make_slices(Cscf, T_I, Tbar_I, nocc, n_b)
+t2 = theta2mo_amp(slice_I)(θ_final_I_l)
+ttheta = theta(slice_I)(t2)
+
+@test norm(θ_final_I_l - ttheta) < 1e-10
+
+run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 10)
 θ_final_Full, θ_benchmark_Full, num_evals_Full = run_nk(Cscf);
 
 

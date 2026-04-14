@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "LiH_sto3g";
+Molecule = "H2-CF_cc-pvtz";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(

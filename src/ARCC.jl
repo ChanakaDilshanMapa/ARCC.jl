@@ -32,6 +32,7 @@ include("FPIteration.jl")
 include("NKSolvers.jl")
 include("Preconditoner.jl")
 include("PreconditionedNKSolvers.jl")
+include("InExactNewton.jl")
 
 # This contains helper functions to make test files less verbose
 include("Factory.jl")

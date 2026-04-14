@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "C2H6_6-31g";
+Molecule = "H2-CF_cc-pvtz";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -44,29 +44,37 @@ t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fo
 ################################################################
 initial_guess = zeros(n_b,n_b,n_b,n_b);
 max_iter = 200;
-tol = 1e-8; 
+tol = 1e-14; 
 peris = make_physaoeris(new_eris);
 purt = 1e-6;
 shift_canonical = 1e-8;
 max_outer_nk = 200;
 
 
-################################################################
-run_fixed_point = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
+# ################################################################
+# run_fixed_point = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
 
-# MO case (Identity Transformation)
-T_I = Matrix{Float64}(I, n_b, n_b);
-θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point(T_I);
-@test norm(θ_final_I - θ_benchmark_I) < 1e-7
+# # MO case (Identity Transformation)
+# T_I = Matrix{Float64}(I, n_b, n_b);
+# θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point(T_I);
+# @test norm(θ_final_I - θ_benchmark_I) < 1e-7
 
 ################################################################
 
 run_fixed_point_diis = fp_iteration_factory_diis(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical, 5; verbose=true);
 
-# MO case (Identity Transformation)
 T_I = Matrix{Float64}(I, n_b, n_b);
 θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point_diis(T_I);
 @test norm(θ_final_I - θ_benchmark_I) < 1e-7
+
+Tbar_I = T_bar(T_I, new_S)
+slice_I = make_slices(Cscf, T_I, Tbar_I, nocc, n_b)
+t2 = theta2mo_amp(slice_I)(θ_final_I)
+
+run_fixed_point_diis = fp_iteration_factory_diis(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical, 5; verbose=true);
+
+T_F = Cscf;
+θ_final_F, θ_benchmark_F, diffs_F = run_fixed_point_diis(Cscf);
 
 
 

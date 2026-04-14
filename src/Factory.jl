@@ -157,6 +157,48 @@ function fp_iteration_factory_diis(new_S, t2, nocc, n_b, Cscf, f, peris, initial
     end
 end
 
+
+"""
+The following factory is corresponding to Inexact Newton Solver.
+"""
+
+export inexact_newton_factory
+
+function inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer, tol, m)
+    return function (T)
+        Tbar = T_bar(T, new_S)
+        slice = make_slices(Cscf, T, Tbar, nocc, n_b)
+        proj = make_projectors(slice)
+        int = make_integrals(proj, peris)
+        fop = make_fock_operators(proj, f)
+
+        coulomint = make_coulomb_integrals(int, slice)
+        fd = make_fock_diags_and_offs(fop)
+
+        # Get function generators
+        j_fun = j_integralθ(int)
+        k_fun = k_integralθ(int)
+        G_o_fun = g_o(fop, int)
+        G_v_fun = g_v(fop, int)
+
+        # Build residual function
+        function build_residual(θ)
+            j = j_fun(θ)
+            k = k_fun(θ)
+            G_o = G_o_fun(θ)
+            G_v = G_v_fun(θ)
+            
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
+            return eqn(θ)
+        end
+
+        θ_benchmark = theta(slice)(t2)
+
+        θ_final, newton_pre, newton_post, num_residual_evals = inexact_newton(initial_guess, build_residual; 
+            fop, tol=tol, max_outer=max_outer, m=m, verbose=true)
+        return θ_final, θ_benchmark, newton_pre, newton_post, num_residual_evals
+    end
+end
 """
 The following factories are corresponding to Newton-Krylov solvers.
 """

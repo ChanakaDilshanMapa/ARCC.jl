@@ -61,79 +61,7 @@ function P_inv_action(F::FockOperators, θ_shape,y)
     return vec(Py)
 end
 
-function gmres_logged(
-    matvec::Function,
-    b::Vector{Float64};
-    m::Int=20,
-    tol::Float64=1e-8,
-    η::Float64=0.1,
-    verbose::Bool=false
-)
-    n = length(b)
-
-    β = norm(b)
-    if β == 0
-        return zeros(n), Float64[], 0
-    end
-
-    V = zeros(n, m+1)
-    H = zeros(m+1, m)
-
-    V[:,1] .= b / β
-
-    gmres_residuals = Float64[]
-    jmax = 0
-
-    for j = 1:m
-        # Arnoldi
-        w = matvec(V[:,j])
-
-        for i = 1:j
-            H[i,j] = dot(V[:,i], w)
-            w .-= H[i,j] .* V[:,i]
-        end
-
-        H[j+1,j] = norm(w)
-
-        # (optional breakdown check)
-        if H[j+1,j] < 1e-14
-            jmax = j
-            break
-        end
-
-        V[:,j+1] .= w ./ H[j+1,j]
-        jmax = j
-
-        # projected residual
-        Hj = H[1:j+1, 1:j]
-        e1 = zeros(j+1)
-        e1[1] = β
-
-        s = Hj \ e1
-        resid_inner = norm(e1 - Hj * s)
-
-        push!(gmres_residuals, resid_inner)
-
-        verbose && println("  GMRES $j: projected residual = $resid_inner")
-
-        if resid_inner <= η * β || resid_inner <= tol
-            verbose && println("  GMRES stopping criterion satisfied.")
-            break
-        end
-    end
-
-    # solve least squares
-    Hj = H[1:jmax+1, 1:jmax]
-    e1 = zeros(jmax+1)
-    e1[1] = β
-
-    s = Hj \ e1
-    x = V[:,1:jmax] * s
-
-    return x, gmres_residuals, jmax
-end
-
-function Precond_newton_krylov(
+function inexact_newton(
     θ::Array{Float64,4},
     residual_fun::Function,
     fop;
@@ -163,13 +91,6 @@ function Precond_newton_krylov(
     θ_vec = vec(copy(θ))
     r = vec_residual(θ_vec)   
 
-    p_inv_r, _, _ = gmres_logged(
-        y -> P_inv_action(fop, θ_shape, y),
-        r;
-        m=m,
-        tol=tol,
-        η=1.0        
-    )
 
     normr = norm(p_inv_r)
 
@@ -277,7 +198,7 @@ function pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris,
             G_o = G_o_fun(θ)
             G_v = G_v_fun(θ)
 
-            eqn = au_ccd_eqns(int, j, k, G_o, G_v)
+            eqn = ar_ccd_eqns(int, j, k, G_o, G_v)
             return eqn(θ)
         end
 
@@ -302,9 +223,13 @@ T_I = Matrix{Float64}(I, n_b, n_b)
 run_nk = pre_nk_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5)
 
 θ_final_I_l, θ_benchmark_I_l, num_evals_I_l = run_nk(T_I);
-# θ_final_Full, θ_benchmark_Full, num_evals_Full = run_nk(Cscf);
-
-
+θ_final_Full, θ_benchmark_Full, num_evals_Full = run_nk(Cscf);
+@test norm(θ_final_I_l - θ_benchmark_I_l)  < 1e-7
+################################################################
+shift_canonical = 1e-8;
+run_fixed_point = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
+θ_final_fp, θ_benchmark_fp, diffs_fp = run_fixed_point(T_I);
+@test norm(θ_final_fp - θ_benchmark_fp)  < 1e-7
 
 
 
