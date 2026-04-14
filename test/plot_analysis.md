@@ -1,31 +1,67 @@
-# ARCC Plot Analysis
-
-This note summarizes the controlled studies requested in the roadmap.
+# Plot Analysis
 
 ## 1) Effect of Regularization
+## a) Identifying Coulson-Fischer Point for dihydrogen
 
+![CF point analysis](figures/s2_vs_bond_distance_H2_cc-pVTZ_for_GHF.svg)
+
+### Question
+At which bond distance the spin symmetry breaks?
+
+### Hypothesis
+Few angstroms away from the equilibrium we will see <S^2> becomes non zero.
+
+### Details
+- System: H2
+- Intialization: GHF
+- Units: Angstroms
+
+### Obeservation
+Spin symmetry breaks after stretching the bond beyond ~ 5 Angstroms.
+
+## b) Effect of bond strectching to the HOMO-LUMO gap for dihydrogen
+
+![Effect of Regularization](figures/homolumo_gap_H2_cc-pVTZ.svg)
+
+### Question
+Does near CF point the HOMO-LUMO gap becomes smaller and become worse afterwards?
+
+### Hypothesis
+- Near CF point the gap should be small and further away from the point it should become even smaller.
+
+### Details
+- System: H2
+- Intialization: RHF
+- Units: Angstroms
+
+### Obeservation
+- Near CF point the gap is ~ 0.1.
+- Away from CF point it becomes smaller.
+- Around 20 angstroms the gap bemoes larger (I don't know why)
+
+## c) Effect of Regularization
 ![Effect of Regularization](figures/H2-CF-7_cc-pvtz/convergence_three_cases_H2-CF-7_cc-pvtz.svg)
 
 ### Question
-Does regularization (level shift / ridge-like stabilization) improve robustness for a small-gap system, and how does it compare to INK?
+How effective is regularization (level shift) for the convergence and convergence rate for a small-gap system, and how does it compare to INK?
 
 ### Hypothesis
-For a small-gap case, unshifted FP should be unstable or slower, while shifted FP (SFP) should be more stable; INK should remain robust without needing explicit regularization.
+- FP should diverge.
+- SFP and INK should converge.
+- INK should converge at a faster rate.
 
 ### Details
-- System: H2-CF at 7 Angstrom, cc-pVTZ (small-gap stress case).
-- Gauge: MO (identity transformation in the test setup).
-- Curves intended by test design: FP, SFP, INK.
-- Relevant script: test_effect_of_regularization.jl.
+- System: H2-CF at 7 Angstrom, cc-pVTZ (small-gap case)
+- Gauge: MO
 
-### Conclusion
-The regularization study is conceptually aligned with theory: SFP should improve over FP in a small-gap regime, and INK should be robust.
+### Observation
+- FP suffers for few iterations with having amplitude difference ~ 1 in 2 norm and then diverrges.
+- SFP took 46 iterations to converge.
+- INK showed few fluctuations at start and then took 31 iterations to converge.
 
-Observed implementation issue:
-- The script saves SVG to rffect_of_regularization_...svg (typo), which is likely unintended.
-- The expected effect_of_regularization figure is not present in the current figures folder.
-
-So the hypothesis is theoretically correct, but the plotting/output naming appears to have a bug or mismatch in generated artifacts.
+- For a system: H2-CF at 10 Angstrom, cc-pVTZ (evensmaller-gap case) any of the solvers does behave as usual.
+- PNK, SFP, SFP+DISS converge to different soltuions.
+- PNK converge to diffent solutions with different rates when appiled to different gauges.
 
 ## 2) Effect of Gauge
 
@@ -35,77 +71,52 @@ So the hypothesis is theoretically correct, but the plotting/output naming appea
 How sensitive are FP and INK to gauge choice (MO, AO, random) for a large-gap system?
 
 ### Hypothesis
-INK should be comparatively gauge-robust; FP behavior should vary more with gauge because its effective preconditioner is naturally tied to MO structure.
+- FP should converge in MO and diverge in AO and random (assuming bigger rotaion from MO).
+- INK should converge in all gagues with same numbers.
 
 ### Details
-- System: C2H6, 6-31G (large-gap case).
-- Gauges compared: MO, AO, random orthogonal gauge.
-- Curves: FP(MO/AO/random) and IN(MO/AO/random).
-- Relevant script: test_effect_of_gauge.jl.
+- System: Ethane, 6-31G (large-gap case)
+- Gauges compared: MO, AO, random gauge
 
-### Conclusion
-The study design directly answers gauge sensitivity. If IN curves remain close across gauges while FP separates more, that confirms the roadmap claim that Newton-type methods with better linear solves are more gauge-stable. That outcome is expected theoretically, not a bug.
+### Observation
+- FP converges only in MO.
+- INK converges in all gauges with same numbers. 
+- FP converge faster compared to INK in MO basis. (My guess is the samml shift I apply to FP to avoid zero divisions would do the this)
 
-## 3) Effect of Jacobian Inverse (Newton Family: INK vs PNK)
+## 3) Effect of Jacobian Inverse 
 
-![Effect of Jacobian Inverse (NK)](figures/C2H6_6-31g/effect_of_jacobian_inverse_nk_C2H6_6-31g.svg)
+![Effect of Jacobian Inverse (NK)](figures/C2H6_6-31g/effect_of_jacobian_inverse_C2H6_6-31g.svg)
 
 ### Question
-Does a better Jacobian-related solve strategy (PNK structure) reduce residual faster than INK under the same conditions?
+What is effect on the convergence and the rate based on how exact are we constructing the Jacobian and how we construct it?
 
 ### Hypothesis
-PNK should converge faster or with fewer residual evaluations than INK due to more effective Krylov/preconditioned linear treatment.
+- All solvers should converge.
+- SFP should be solver than INK. 
 
 ### Details
-- System: C2H6, 6-31G.
-- Gauge: MO.
-- Curves: INK vs PNK.
-- Relevant script: test_effect_of_jacobian_inverse_nk.jl.
+- System: Ethane, 6-31G (large-gap case)
+- Gauges compared: MO
 
-### Conclusion
-If PNK drops faster than INK, the hypothesis is correct and consistent with the roadmap claim that PNK is close to optimal in practice. This is expected from theory and indicates no obvious bug.
-
-## 4) Effect of Jacobian Inverse (Fixed-Point Family: SFP vs SFP+DIIS)
-
-![Effect of Jacobian Inverse (FP)](figures/C2H6_6-31g/effect_of_jacobian_inverse_fp_C2H6_6-31g.svg)
-
-### Question
-In the FP family, does DIIS acceleration (approximate Jacobian inversion in Krylov-like space) improve convergence over plain SFP?
-
-### Hypothesis
-SFP+DIIS should generally outperform SFP in residual reduction speed.
-
-### Details
-- System: C2H6, 6-31G.
-- Gauge: MO.
-- Curves: SFP vs SFP+DIIS.
-- Relevant script: test_effect_of_jacobian_inverse_fp.jl.
-
-### Conclusion
-If SFP+DIIS converges faster, this supports the theoretical picture that DIIS acts like an approximate Jacobian inverse in an iterative subspace. That is expected behavior, not a bug.
+### Observation
+- All solvers should converged.
+- PNK was the fastest. 
+- SFP was the slowest.
+- INK was faster than SFP but with DIIS SFP is faster than INK.
 
 ## 5) Effect of Preconditioning
 
 ![Effect of Preconditioning](figures/C2H6_6-31g/effect_of_preconditioning_C2H6_6-31g.svg)
 
 ### Question
-How much does explicit preconditioning help Newton-Krylov in a non-canonical (random gauge) basis?
+What is the effect on NK by preconditioning in an arbitrary gauge?
 
 ### Hypothesis
-PNK should be clearly more robust/faster than NK in random gauge because the preconditioner targets gauge-sensitive conditioning.
+PNK should be faster than NK.
 
 ### Details
-- System: C2H6, 6-31G.
-- Gauge: random orthogonal gauge.
-- Curves: NK vs PNK.
-- Relevant script: test_effect_of_preconditioning.jl.
+- System: Ethane, 6-31G (large-gap case)
+- Gauges compared: Random
 
-### Conclusion
-A clear PNK advantage would confirm the roadmap statement that the correct preconditioner improves conditioning and supports gauge-invariant behavior of the effective linearized problem. This would be theoretically expected.
-
----
-
-## Overall Verdict
-- The controlled-study structure matches the roadmap very well.
-- The main likely issue is artifact naming/output consistency in the regularization script (notably rffect_of_regularization typo and missing expected figure file).
-- For gauge/Jacobian-inverse/preconditioning studies, results consistent with faster PNK or DIIS-accelerated behavior are expected and theoretically justified.
+### Observation
+- PNK is significantly faster.

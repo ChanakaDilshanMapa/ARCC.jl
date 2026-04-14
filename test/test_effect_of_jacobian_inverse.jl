@@ -104,14 +104,35 @@ else
     diffs_recovered
 end
 ################################################################
-x_sfp = collect(1:length(diffs_sfp))
-x_sfp_plus_diis = collect(1:length(diffs_sfp_plus_diss))
+common_r0 = if !isempty(diffs_sfp) && isfinite(diffs_sfp[1]) && diffs_sfp[1] > 0
+    diffs_sfp[1]
+elseif !isempty(diffs_sfp_plus_diss) && isfinite(diffs_sfp_plus_diss[1]) && diffs_sfp_plus_diss[1] > 0
+    diffs_sfp_plus_diss[1]
+elseif !isempty(newton_pre_ink) && isfinite(newton_pre_ink[1]) && newton_pre_ink[1] > 0
+    newton_pre_ink[1]
+elseif !isempty(newton_pre_pnk) && isfinite(newton_pre_pnk[1]) && newton_pre_pnk[1] > 0
+    newton_pre_pnk[1]
+else
+    1.0
+end
+
+y_sfp = vcat([common_r0], diffs_sfp)
+y_sfp_plus_diis = vcat([common_r0], diffs_sfp_plus_diss)
+y_ink = vcat([common_r0], newton_post_ink)
+y_pnk = vcat([common_r0], newton_post_pnk)
+
+x_sfp = collect(0:length(diffs_sfp))
+x_sfp_plus_diis = collect(0:length(diffs_sfp_plus_diss))
+x_ink = collect(0:length(newton_post_ink))
+x_pnk = collect(0:length(newton_post_pnk))
 
 all_series_y = Float64[]
-append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_sfp))
-append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_sfp_plus_diss))
+append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_sfp))
+append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_sfp_plus_diis))
+append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_ink))
+append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_pnk))
 
-max_x = max(length(diffs_sfp), length(diffs_sfp_plus_diss))
+max_x = max(length(x_sfp), length(x_sfp_plus_diis), length(x_ink), length(x_pnk))
 
 p_two = plot(
     xlabel="\nnumber of residual evaluations\n",
@@ -137,7 +158,7 @@ p_two = plot(
 )
 
 plot!(
-    p_two, x_sfp, diffs_sfp;
+    p_two, x_sfp, y_sfp;
     label=false,
     color=:orange,
     linestyle=:dash,
@@ -146,7 +167,7 @@ plot!(
 )
 
 plot!(
-    p_two, x_sfp_plus_diis, diffs_sfp_plus_diss;
+    p_two, x_sfp_plus_diis, y_sfp_plus_diis;
     label=false,
     color=:darkblue,
     linestyle=:solid,
@@ -154,9 +175,29 @@ plot!(
     dash_pattern="on 0.45cm off 0.30cm"
 )
 
+plot!(
+    p_two, x_ink, y_ink;
+    label=false,
+    color=:darkgreen,
+    linestyle=:dash,
+    linewidth=5,
+    dash_pattern="on 0.28cm off 0.24cm"
+)
+
+plot!(
+    p_two, x_pnk, y_pnk;
+    label=false,
+    color="#5C2E00",
+    linestyle=:solid,
+    linewidth=5,
+    dash_pattern="on 0.85cm off 0.30cm"
+)
+
 legend_lw = 2.5
 plot!(p_two, [NaN], [NaN]; label="SFP", color=:orange, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.70cm off 0.30cm")
 plot!(p_two, [NaN], [NaN]; label="SFP+DIIS", color=:darkblue, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.45cm off 0.30cm")
+plot!(p_two, [NaN], [NaN]; label="INK", color=:darkgreen, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.28cm off 0.24cm")
+plot!(p_two, [NaN], [NaN]; label="PNK", color="#5C2E00", linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.85cm off 0.30cm")
 
 hline!(p_two, [tol], color=:magenta, linestyle=:solid, linewidth=5, label=false)
 
@@ -171,7 +212,7 @@ end
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)
-pdf_two = joinpath(fig_dir, "effect_of_jacobian_inverse_fp_$(Molecule).pdf")
-svg_two = joinpath(fig_dir, "effect_of_jacobian_inverse_fp_$(Molecule).svg")
+pdf_two = joinpath(fig_dir, "effect_of_jacobian_inverse_$(Molecule).pdf")
+svg_two = joinpath(fig_dir, "effect_of_jacobian_inverse_$(Molecule).svg")
 savefig(p_two, pdf_two)
 savefig(p_two, svg_two)
