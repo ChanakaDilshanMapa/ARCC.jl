@@ -58,11 +58,11 @@ T_I = Matrix{Float64}(I, n_b, n_b);
 random = random_orthogonal(n_b)
 ################################################################
 run_nk = nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_nk, θ_benchmark_nk, newton_pre_nk, newton_post_nk, num_evals_nk = run_nk(random);
+θ_final_nk, θ_benchmark_nk, newton_pre_nk, newton_post_nk, gmres_residuals_nk, num_evals_nk = run_nk(random);
 @test norm(θ_final_nk - θ_benchmark_nk) < 1e-7
 
 run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, num_evals_pnk = run_pnk(random);
+θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = run_pnk(random);
 @test norm(θ_final_pnk - θ_benchmark_pnk) < 1e-7
 ################################################################
 x_nk = collect(1:length(newton_post_nk))
@@ -79,58 +79,67 @@ end
 y_nk_plot = vcat([r0], newton_post_nk)
 y_pnk_plot = vcat([r0], newton_post_pnk)
 x_nk_plot = collect(0:length(newton_post_nk))
-x_pnk_plot = collect(0:length(newton_post_pnk))
+gmres_counts_nk = [length(residuals) for residuals in gmres_residuals_nk]
+gmres_counts_pnk = [length(residuals) for residuals in gmres_residuals_pnk]
+x_nk_plot = vcat(0, cumsum(1 .+ gmres_counts_nk))
+x_pnk_plot = vcat(0, cumsum(1 .+ gmres_counts_pnk))
 
 all_series_y = Float64[]
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_nk_plot))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_pnk_plot))
 
-max_x = max(length(x_nk_plot), length(x_pnk_plot))
+max_x = max(maximum(x_nk_plot), maximum(x_pnk_plot))
+
+# Figure styling (target ~0.5\textwidth) and unified fonts
+text_pt = 11
+figure_width = 420
+figure_height = Int(round(figure_width * 0.66))
 
 p_two = plot(
-    xlabel="\nnumber of residual evaluations\n",
-    ylabel="\nresidual norm\n",
-    title="Effect of Preconditioning\n Ethane (6-31G)\n",
+    xlabel="\nnumber of residual evaluations",
+    ylabel="residual norm\n",
     yscale=:log10,
     legend=:topright,
-    linewidth=2,
+    linewidth=1.5,
     grid=true,
-    gridlinewidth=1.5,
+    gridlinewidth=1.0,
     gridcolor=:gray40,
     gridalpha=0.6,
-    size=(1200, 800),
-    titlefont=font(32, "Computer Modern"),
-    guidefont=font(32, "Computer Modern"),
-    tickfont=font(24, "Computer Modern"),
-    legendfont=font(20, "Computer Modern"),
-    top_margin=16Plots.mm,
-    bottom_margin=10Plots.mm,
-    left_margin=10Plots.mm,
-    right_margin=10Plots.mm,
+    size=(figure_width, figure_height),
+    titlefont=font(text_pt, "Computer Modern"),
+    guidefont=font(text_pt, "Computer Modern"),
+    tickfont=font(text_pt, "Computer Modern"),
+    legendfont=font(text_pt, "Computer Modern"),
+    top_margin=0Plots.mm,
+    bottom_margin=0Plots.mm,
+    left_margin=0Plots.mm,
+    right_margin=0Plots.mm,
     yticks=10.0 .^ (-8:2:2)
 )
 
 plot!(
     p_two, x_nk_plot, y_nk_plot;
     label=false,
-    color=:orange,
+    color=:purple,
     linestyle=:dash,
-    linewidth=5
+    linewidth=2.5,
+    dash_pattern="on 0.70cm off 0.30cm"
 )
 
 plot!(
     p_two, x_pnk_plot, y_pnk_plot;
     label=false,
-    color=:darkblue,
-    linestyle=:dash,
-    linewidth=5
+    color=:pink,
+    linestyle=:dot,
+    linewidth=2.5,
+    dash_pattern="on 0.05cm off 0.20cm"
 )
 
-legend_lw = 2.5
-plot!(p_two, [NaN], [NaN]; label="NK", color=:orange, linestyle=:dash, linewidth=legend_lw)
-plot!(p_two, [NaN], [NaN]; label="PNK", color=:darkblue, linestyle=:dash, linewidth=legend_lw)
+legend_lw = 1.5
+plot!(p_two, [NaN], [NaN]; label="NK", color=:purple, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.25cm off 0.20cm")
+plot!(p_two, [NaN], [NaN]; label="PNK", color=:pink, linestyle=:dot, linewidth=legend_lw, dash_pattern="on 0.05cm off 0.20cm")
 
-hline!(p_two, [tol], color=:magenta, linestyle=:solid, linewidth=5, label=false)
+hline!(p_two, [tol], color=:magenta, linestyle=:dash, linewidth=1.5, label=false)
 
 filtered = filter(y -> isfinite(y) && y > 0, all_series_y)
 if !isempty(filtered)
@@ -140,6 +149,9 @@ if !isempty(filtered)
 else
     plot!(p_two; xlims=(0, max_x * 1.15))
 end
+
+# tighten margins similar to matplotlib tight_layout
+plot!(p_two; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.mm, bottom_margin=0Plots.mm)
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)

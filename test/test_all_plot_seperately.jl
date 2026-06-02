@@ -1,7 +1,7 @@
 using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
-Molecule = "C2H6_Ethane_6-31G";
+Molecule = "C2H6_6-31g";
 base_dir = joinpath(pkg_root, "test/pyscf_data", Molecule);
 
 files = Dict(
@@ -234,21 +234,21 @@ p_fp = plot(
 
 plot!(
     p_fp, start_idx:length(diffs_I), diffs_I[start_idx:end], 
-    label="", color=:darkgreen, linestyle=:dash, linewidth=5
+    label="", color=:orange, linestyle=:solid, linewidth=5
 )
 plot!(
     p_fp, start_idx:length(diffs_F), diffs_F[start_idx:end], 
-    label="", color=:magenta, linestyle=:dash, linewidth=5
+    label="", color=:darkgreen, linestyle=:solid, linewidth=5
 )
 plot!(
     p_fp, start_idx:length(diffs_F_shifted), diffs_F_shifted[start_idx:end], 
-    label="", color=:orange, linestyle=:dash, linewidth=5
+    label="", color=:magenta, linestyle=:solid, linewidth=5
 )
 
 # Add invisible thin lines for legend only
-plot!(p_fp, [NaN], [NaN], label="FP MO basis", color=:darkgreen, linestyle=:solid, linewidth=3)
-plot!(p_fp, [NaN], [NaN], label="FP AO basis", color=:magenta, linestyle=:solid, linewidth=3)
-plot!(p_fp, [NaN], [NaN], label="FP Shifted AO basis", color=:orange, linestyle=:solid, linewidth=3)
+plot!(p_fp, [NaN], [NaN], label="FP MO ", color=:orange, linestyle=:solid, linewidth=3)
+plot!(p_fp, [NaN], [NaN], label="FP AO ", color=:darkgreen, linestyle=:solid, linewidth=3)
+plot!(p_fp, [NaN], [NaN], label="SFP AO ", color=:magenta, linestyle=:solid, linewidth=3)
 
 # Set limits for FP plot
 fp_series_y = Float64[]

@@ -73,10 +73,10 @@ function inexact_newton(
 
             verbose && println("  GMRES $j: inner = $resid_inner")
 
-            if resid_inner <= η * β
-                verbose && println("  GMRES stopping criterion satisfied: $resid_inner <= $(η * β)")
-                break
-            end
+            # if resid_inner <= η * β
+            #     verbose && println("  GMRES stopping criterion satisfied: $resid_inner <= $(η * β)")
+            #     break
+            # end
         end
 
         Hj = H[1:jmax+1, 1:jmax]

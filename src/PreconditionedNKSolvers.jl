@@ -13,6 +13,7 @@ function preconditioned_nk_solver_with_logs(
     tol=1e-8,
     max_outer=300,
     m=5,
+    m_p = 10,
     verbose=true,
     η=0.1
 )
@@ -36,14 +37,16 @@ function preconditioned_nk_solver_with_logs(
     θ_vec = vec(copy(θ))
     r = vec_residual(θ_vec)
 
+    true_residual_norm = norm(r)
+    verbose && println("NK: initial ||r|| = $true_residual_norm")
     function apply_Pinv(rhs)
         β = norm(rhs)
-        V = zeros(n, m+1)
-        H = zeros(m+1, m)
+        V = zeros(n, m_p+1)
+        H = zeros(m_p+1, m_p)
 
         V[:,1] .= rhs / β
 
-        for j = 1:m
+        for j = 1:m_p
             w = P_inv_action(fop, θ_shape, V[:,j])
 
             for i = 1:j
@@ -64,6 +67,7 @@ function preconditioned_nk_solver_with_logs(
         jmax === nothing && error("GMRES failed: all columns zero")
 
         Hj = H[1:jmax+1, 1:jmax]
+
         e1 = zeros(jmax+1); e1[1] = β
 
         s = Hj \ e1
@@ -73,19 +77,21 @@ function preconditioned_nk_solver_with_logs(
     p_inv_r = apply_Pinv(r)
     normr = norm(p_inv_r)
 
-    verbose && println("NK: initial ||P⁻¹r|| = $normr")
+    # verbose && println("NK: initial ||P⁻¹r|| = $normr")
 
     newton_residuals_pre  = Float64[]
     newton_residuals_post = Float64[]
     gmres_residuals       = Vector{Vector{Float64}}()
 
-    push!(newton_residuals_pre, normr)
+    # push!(newton_residuals_pre, normr)
+    push!(newton_residuals_pre, true_residual_norm)
 
     k = 0
     total_inner = 0
 
 
-    while normr > tol && k < max_outer
+    while true_residual_norm > tol && k < max_outer
+    # while normr > tol && k < max_outer
 
         β = normr
         V = zeros(n, m+1)
@@ -93,7 +99,7 @@ function preconditioned_nk_solver_with_logs(
 
         V[:,1] .= p_inv_r / β
 
-        verbose && println("Newton iter $k: ||P⁻¹r|| = $normr")
+        verbose && println("Newton iter $k: ||r|| = $true_residual_norm")
 
         gmres_current = Float64[]
         jmax = 0
@@ -161,8 +167,8 @@ function preconditioned_nk_solver_with_logs(
 
             Hj = H[1:j+1, 1:j]
             e1 = zeros(j+1); e1[1] = β
-
             s = Hj \ e1
+            
             resid_inner = norm(e1 - Hj * s)
 
             push!(gmres_current, resid_inner)
@@ -191,25 +197,26 @@ function preconditioned_nk_solver_with_logs(
 
         r = vec_residual(θ_vec)
 
+        true_residual_norm = norm(r)
         p_inv_r = apply_Pinv(r)
         normr = norm(p_inv_r)
 
-        push!(newton_residuals_post, normr)
+        push!(newton_residuals_post, true_residual_norm)
 
-        if normr > tol
-            push!(newton_residuals_pre, normr)
+        if true_residual_norm > tol
+            push!(newton_residuals_pre, true_residual_norm)
         end
 
         k += 1
     end
 
-   if normr <= tol
+   if true_residual_norm <= tol
         verbose && println("Converged in $k Newton and $total_inner GMRES iterations.")
     else
         verbose && println("Did NOT converge in $k Newton and $total_inner GMRES iterations.")
     end
 
-    verbose && println("Final ||P⁻¹r|| = $normr")
+    verbose && println("Final ||r|| = $true_residual_norm")
     verbose && println("Total residual evaluations: $(num_residual_evals[])")
 
     θ_final = reshape(θ_vec, θ_shape)

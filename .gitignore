@@ -1,3 +1,7 @@
 test/pyscf_data/
+!test/pyscf_data/C2H6_6-31g/
+!test/pyscf_data/H2-CF-7_cc-pvtz/
+!test/pyscf_data/LiH_sto3g/
+
 test/saved_data/
 README.md

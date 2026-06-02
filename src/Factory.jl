@@ -302,7 +302,7 @@ The following factories are corresponding to preconditoned Newton-Krylov solvers
 export preconditioned_nk_solver_factory_with_logs
 
 function preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris,
-                        initial_guess, max_outer, tol, m)
+                        initial_guess, max_outer, tol, m, m_p)
 
     return function (T)
 
@@ -336,6 +336,7 @@ function preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, 
             tol=tol,
             max_outer=max_outer,
             m=m,
+            m_p=m_p,
             verbose=true
         )
 

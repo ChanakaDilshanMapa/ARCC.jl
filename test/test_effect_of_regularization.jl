@@ -47,7 +47,7 @@ peris = make_physaoeris(new_eris);
 purt = 1e-6;
 shift_canonical = 1e-8;
 max_outer_nk = 200;
-shift_non_canonical = 1.08;
+shift_non_canonical = 0.64;
 
 T_I = Matrix{Float64}(I, n_b, n_b)
 run_fixed_point = fp_iteration_factory(new_S, mo, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
@@ -75,26 +75,36 @@ append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_ink))
 
 max_x = max(length(diffs_I), length(diffs_fp_shifted), length(newton_post_I_l))
 
+# Figure styling to match LaTeX text (target ~0.5\textwidth)
+text_pt = 11
+figure_width = 420  # pixels: approximate target for 0.5\textwidth when exported
+figure_height = Int(round(figure_width * 0.66))
+
 p_three = plot(
-    xlabel="\nnumber of residual evaluations\n",
-    ylabel="\nresidual norm\n",
-    title="Effect of Regularization\n Dihydrogen (7Å,cc-pVTZ)\n",
+    xlabel="\nnumber of residual evaluations",
+    ylabel="residual norm\n",
     yscale=:log10,
-    legend=:topright,
-    linewidth=2,
+    legend=(0.78, 0.92),
+    linewidth=1.5,
     grid=true,
-    gridlinewidth=1.5,
+    gridlinewidth=1.0,
     gridcolor=:gray40,
     gridalpha=0.6,
-    size=(1200, 800),
-    titlefont=font(32, "Computer Modern"),
-    guidefont=font(32, "Computer Modern"),
-    tickfont=font(24, "Computer Modern"),
-    legendfont=font(20, "Computer Modern"),
-    top_margin=16Plots.mm,
-    bottom_margin=10Plots.mm,
-    left_margin=10Plots.mm,
-    right_margin=10Plots.mm,
+    size=(figure_width, figure_height),
+    xguidefont=font(text_pt, "Computer Modern"),
+    yguidefont=font(text_pt, "Computer Modern"),
+    xtickfontsize=text_pt,
+    ytickfontsize=text_pt,
+    xtickfontfamily="Computer Modern",
+    ytickfontfamily="Computer Modern",
+    legendfontsize=text_pt,
+    legendfontfamily="Computer Modern",
+    titlefontsize=text_pt,
+    titlefontfamily="Computer Modern",
+    top_margin=0Plots.mm,
+    bottom_margin=0Plots.mm,
+    left_margin=0Plots.mm,
+    right_margin=0Plots.mm,
     yticks=10.0 .^ (-8:2:2)
 )
 
@@ -102,33 +112,35 @@ plot!(
     p_three, x_fp, diffs_I;
     label=false,
     color=:orange,
-    linestyle=:dash,
-    linewidth=5
+    linestyle=:solid,
+    linewidth=2.5
 )
 
 plot!(
     p_three, x_fp_shifted, diffs_fp_shifted;
     label=false,
-    color=:darkblue,
+    color=:blue,
     linestyle=:dash,
-    linewidth=5
+    linewidth=2.5
 )
 
 plot!(
     p_three, x_ink, y_ink;
     label=false,
-    color=:darkgreen,
-    linestyle=:dash,
-    linewidth=5
+    color=:gray,
+    seriestype=:scatter,
+    marker=:+,
+    markerstrokewidth=2,
+    markersize=6
 )
 
-# Add proxy legend entries with thinner lines than the plotted curves.
+# Add proxy legend entries that match the plotted curves.
 legend_lw = 2.5
-plot!(p_three, [NaN], [NaN]; label="FP", color=:orange, linestyle=:dash, linewidth=legend_lw)
-plot!(p_three, [NaN], [NaN]; label="SFP", color=:darkblue, linestyle=:dash, linewidth=legend_lw)
-plot!(p_three, [NaN], [NaN]; label="INK", color=:darkgreen, linestyle=:dash, linewidth=legend_lw)
+plot!(p_three, [NaN], [NaN]; label="FP", color=:orange, linestyle=:solid, linewidth=legend_lw)
+plot!(p_three, [NaN], [NaN]; label="SFP", color=:blue, linestyle=:dash, linewidth=1.6)
+plot!(p_three, [NaN], [NaN]; label="INK", color=:gray, seriestype=:scatter, marker=:+, markerstrokewidth=2, markersize=4)
 
-hline!(p_three, [tol], color=:magenta, linestyle=:solid, linewidth=5, label=false)
+hline!(p_three, [tol], color=:magenta, linestyle=:dash, linewidth=1.5, label=false)
 
 filtered = filter(y -> isfinite(y) && y > 0, all_series_y)
 if !isempty(filtered)
@@ -139,12 +151,16 @@ else
     plot!(p_three; xlims=(0, max_x * 1.15))
 end
 
+# tighten margins similar to ``tight_layout`` in matplotlib
+plot!(p_three; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.mm, bottom_margin=0Plots.mm)
+
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)
 pdf_three = joinpath(fig_dir, "effect_of_regularization_$(Molecule).pdf")
-svg_three = joinpath(fig_dir, "rffect_of_regularization_$(Molecule).svg")
+svg_three = joinpath(fig_dir, "effect_of_regularization_$(Molecule).svg")
 savefig(p_three, pdf_three)
 savefig(p_three, svg_three)
+
 
 
 

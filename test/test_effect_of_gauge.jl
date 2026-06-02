@@ -78,15 +78,15 @@ run_in = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_gu
 θ_final_random, θ_benchmark_random, newton_pre_random, newton_post_random, num_evals_random = run_in(random);
 ################################################################
 # Combined convergence/divergence plot for the three requested cases
-x_fp_mo = collect(1:length(diffs_mo))
-x_fp_ao = collect(1:length(diffs_ao))
-x_fp_random = collect(1:length(diffs_random))
+x_fp_mo = collect(0:length(diffs_mo) - 1)
+x_fp_ao = collect(0:length(diffs_ao) - 1)
+x_fp_random = collect(0:length(diffs_random) - 1)
 
 # Build Newton residual convergence history for inexact Newton
 # newton_post contains residuals after each Newton iteration
-x_in_mo = collect(1:length(newton_post_mo))
-x_in_ao = collect(1:length(newton_post_ao))
-x_in_random = collect(1:length(newton_post_random))
+x_in_mo = collect(0:length(newton_post_mo) - 1)
+x_in_ao = collect(0:length(newton_post_ao) - 1)
+x_in_random = collect(0:length(newton_post_random) - 1)
 
 all_series_y = Float64[]
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_mo))
@@ -105,114 +105,121 @@ max_x = maximum((
     length(newton_post_random)
 ))
 
+text_pt = 11
+
+figure_width = 420
+figure_height = Int(round(figure_width * 0.66))
+
 p_three = plot(
-    xlabel="\nnumber of residual evaluations\n",
-    ylabel="\nresidual norm\n",
-    title="Effect of Guage\n Ethane (6-31G)\n",
+    xlabel="\nnumber of residual evaluations",
+    ylabel="residual norm\n",
     yscale=:log10,
-    legend=:topright,
-    linewidth=2,
+    legend=(0.78, 0.92),
+    linewidth=1.5,
     grid=true,
-    gridlinewidth=1.5,
+    gridlinewidth=1.0,
     gridcolor=:gray40,
     gridalpha=0.6,
-    size=(1200, 800),
-    titlefont=font(32, "Computer Modern"),
-    guidefont=font(32, "Computer Modern"),
-    tickfont=font(24, "Computer Modern"),
-    legendfont=font(20, "Computer Modern"),
-    top_margin=16Plots.mm,
-    bottom_margin=10Plots.mm,
-    left_margin=10Plots.mm,
-    right_margin=10Plots.mm,
+    size=(figure_width, figure_height),
+    xguidefont=font(text_pt, "Computer Modern"),
+    yguidefont=font(text_pt, "Computer Modern"),
+    xtickfontsize=text_pt,
+    ytickfontsize=text_pt,
+    xtickfontfamily="Computer Modern",
+    ytickfontfamily="Computer Modern",
+    legendfontsize=text_pt,
+    legendfontfamily="Computer Modern",
+    titlefontsize=text_pt,
+    titlefontfamily="Computer Modern",
+    top_margin=0Plots.mm,
+    bottom_margin=0Plots.mm,
+    left_margin=0Plots.mm,
+    right_margin=0Plots.mm,
     yticks=10.0 .^ (-8:2:2)
 )
 
+# Plot series
 plot!(
     p_three, x_fp_mo, diffs_mo;
     label=false,
     color=:orange,
-    linestyle=:dash,
-    linewidth=5
+    linestyle=:solid,
+    linewidth=2.5
 )
 
 plot!(
     p_three, x_fp_ao, diffs_ao;
     label=false,
-    color=:lightgreen,
+    color=:darkgreen,
     linestyle=:dash,
-    linewidth=5
+    linewidth=2.5
 )
 
 plot!(
     p_three, x_fp_random, diffs_random;
     label=false,
-    color=:darkgreen,
-    linestyle=:dash,
-    linewidth=5
+    color=:lightgreen,
+    linestyle=:dashdot,
+    linewidth=2.5
 )
 
 plot!(
     p_three, x_in_mo, newton_post_mo;
     label=false,
-    color=:brown,
-    linestyle=:dash,
-    linewidth=6,
-    dash_pattern="on 0.70cm off 0.30cm"
+    color=:gray,
+    seriestype=:scatter,
+    marker=:+,
+    markerstrokewidth=2,
+    markersize=6
 )
 
 plot!(
     p_three, x_in_ao, newton_post_ao;
     label=false,
-    color=:black,
-    linestyle=:dash,
-    linewidth=5,
-    dash_pattern="on 0.45cm off 0.30cm"
+    color=:brown,
+    seriestype=:scatter,
+    marker=:x,
+    markerstrokewidth=3,
+    markersize=4
 )
 
 plot!(
     p_three, x_in_random, newton_post_random;
     label=false,
-    color=:gray,
-    linestyle=:dash,
-    linewidth=4,
-    dash_pattern="on 0.20cm off 0.30cm"
+    color=:black,
+    seriestype=:scatter,
+    marker=:dot,
+    markerstrokewidth=0,
+    markersize=2
 )
 
-# Add proxy legend entries with thinner lines than the plotted curves.
+# Legend entries
 legend_lw = 2.5
-plot!(p_three, [NaN], [NaN]; label="FP MO", color=:orange, linestyle=:dash, linewidth=legend_lw)
-plot!(p_three, [NaN], [NaN]; label="IN MO", color=:brown, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.70cm off 0.30cm")
-plot!(p_three, [NaN], [NaN]; label="FP AO", color=:lightgreen, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 1.25cm off 0.32cm")
-plot!(p_three, [NaN], [NaN]; label="IN AO", color=:black, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.45cm off 0.30cm")
-plot!(p_three, [NaN], [NaN]; label="FP Random", color=:darkgreen, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.22cm off 0.18cm")
-plot!(p_three, [NaN], [NaN]; label="IN Random", color=:gray, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.20cm off 0.30cm")
 
-hline!(p_three, [tol], color=:magenta, linestyle=:solid, linewidth=5, label=false)
+plot!(p_three, [NaN], [NaN]; label="FP MO", color=:orange, linestyle=:solid, linewidth=legend_lw)
+plot!(p_three, [NaN], [NaN]; label="INK MO", color=:gray, seriestype=:scatter, marker=:+, markerstrokewidth=2, markersize=4)
+plot!(p_three, [NaN], [NaN]; label="FP AO", color=:darkgreen, linestyle=:dash, linewidth=1.8)
+plot!(p_three, [NaN], [NaN]; label="INK AO", color=:brown, seriestype=:scatter, marker=:x, markerstrokewidth=3, markersize=4)
+plot!(p_three, [NaN], [NaN]; label="FP Ra", color=:lightgreen, linestyle=:dashdot, linewidth=legend_lw)
+plot!(p_three, [NaN], [NaN]; label="INK Ra", color=:black, seriestype=:scatter, marker=:pixel, markerstrokewidth=2, markersize=2)
+
+hline!(p_three, [tol], color=:magenta, linestyle=:dash, linewidth=1.5, label=false)
 
 filtered = filter(y -> isfinite(y) && y > 0, all_series_y)
 if !isempty(filtered)
     y_min = max(minimum(filtered) / 5, 1e-14)
     y_max = maximum(filtered) * 5
-    plot!(p_three; ylims=(y_min, y_max), xlims=(0, max_x * 1.15))
+    plot!(p_three; ylims=(y_min, y_max), xlims=(0, 26))
 else
-    plot!(p_three; xlims=(0, max_x * 1.15))
+    plot!(p_three; xlims=(0, 26))
 end
+
+plot!(p_three; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.mm, bottom_margin=0Plots.mm)
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)
 pdf_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule).pdf")
 svg_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule).svg")
+
 savefig(p_three, pdf_three)
 savefig(p_three, svg_three)
-
-
-
-
-
-
-
-
-
-
-

@@ -66,7 +66,7 @@ run_ink = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_g
 @test norm(θ_final_ink - θ_benchmark_ink) < 1e-7
 
 run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, num_evals_pnk = run_pnk(T_I);
+θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = run_pnk(T_I);
 @test norm(θ_final_pnk - θ_benchmark_pnk) < 1e-7
 
 run_sfp = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_non_canonical; verbose=true);
@@ -124,7 +124,8 @@ y_pnk = vcat([common_r0], newton_post_pnk)
 x_sfp = collect(0:length(diffs_sfp))
 x_sfp_plus_diis = collect(0:length(diffs_sfp_plus_diss))
 x_ink = collect(0:length(newton_post_ink))
-x_pnk = collect(0:length(newton_post_pnk))
+gmres_counts_pnk = [length(residuals) for residuals in gmres_residuals_pnk]
+x_pnk = vcat(0, cumsum(1 .+ gmres_counts_pnk))
 
 all_series_y = Float64[]
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_sfp))
@@ -132,74 +133,83 @@ append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_sfp_plus_diis))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_ink))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_pnk))
 
-max_x = max(length(x_sfp), length(x_sfp_plus_diis), length(x_ink), length(x_pnk))
+max_x = max(maximum(x_sfp), maximum(x_sfp_plus_diis), maximum(x_ink), maximum(x_pnk))
+
+# Figure styling (target ~0.5\textwidth) and unified fonts
+text_pt = 11
+figure_width = 420
+figure_height = Int(round(figure_width * 0.66))
 
 p_two = plot(
-    xlabel="\nnumber of residual evaluations\n",
-    ylabel="\nresidual norm\n",
-    title="Effect of Jacobian Inverse\n Ethane (6-31G)\n",
+    xlabel="\nnumber of residual evaluations",
+    ylabel="residual norm\n",
     yscale=:log10,
-    legend=:topright,
-    linewidth=2,
+    legend=(0.68, 0.88),
+    linewidth=1.5,
     grid=true,
-    gridlinewidth=1.5,
+    gridlinewidth=1.0,
     gridcolor=:gray40,
     gridalpha=0.6,
-    size=(1200, 800),
-    titlefont=font(32, "Computer Modern"),
-    guidefont=font(32, "Computer Modern"),
-    tickfont=font(24, "Computer Modern"),
-    legendfont=font(20, "Computer Modern"),
-    top_margin=16Plots.mm,
-    bottom_margin=10Plots.mm,
-    left_margin=10Plots.mm,
-    right_margin=10Plots.mm,
+    size=(figure_width, figure_height),
+    xguidefont=font(text_pt, "Computer Modern"),
+    yguidefont=font(text_pt, "Computer Modern"),
+    xtickfontsize=text_pt,
+    ytickfontsize=text_pt,
+    xtickfontfamily="Computer Modern",
+    ytickfontfamily="Computer Modern",
+    legendfontsize=text_pt,
+    legendfontfamily="Computer Modern",
+    titlefontsize=text_pt,
+    titlefontfamily="Computer Modern",
+    top_margin=0Plots.mm,
+    bottom_margin=0Plots.mm,
+    left_margin=0Plots.mm,
+    right_margin=0Plots.mm,
     yticks=10.0 .^ (-8:2:2)
 )
 
 plot!(
     p_two, x_sfp, y_sfp;
     label=false,
-    color=:orange,
+    color=:blue,
     linestyle=:dash,
-    linewidth=5,
+    linewidth=2.5,
     dash_pattern="on 0.70cm off 0.30cm"
 )
 
 plot!(
     p_two, x_sfp_plus_diis, y_sfp_plus_diis;
     label=false,
-    color=:darkblue,
+    color=:lightblue,
     linestyle=:solid,
-    linewidth=5,
-    dash_pattern="on 0.45cm off 0.30cm"
+    linewidth=2.5
 )
 
 plot!(
     p_two, x_ink, y_ink;
     label=false,
-    color=:darkgreen,
-    linestyle=:dash,
-    linewidth=5,
-    dash_pattern="on 0.28cm off 0.24cm"
+    color=:gray,
+    seriestype=:scatter,
+    marker=:+,
+    markerstrokewidth=2,
+    markersize=6
 )
 
 plot!(
     p_two, x_pnk, y_pnk;
     label=false,
-    color="#5C2E00",
-    linestyle=:solid,
-    linewidth=5,
-    dash_pattern="on 0.85cm off 0.30cm"
+    color=:olive,
+    linestyle=:dashdot,
+    linewidth=2.5
 )
 
 legend_lw = 2.5
-plot!(p_two, [NaN], [NaN]; label="SFP", color=:orange, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.70cm off 0.30cm")
-plot!(p_two, [NaN], [NaN]; label="SFP+DIIS", color=:darkblue, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.45cm off 0.30cm")
-plot!(p_two, [NaN], [NaN]; label="INK", color=:darkgreen, linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.28cm off 0.24cm")
-plot!(p_two, [NaN], [NaN]; label="PNK", color="#5C2E00", linestyle=:dash, linewidth=legend_lw, dash_pattern="on 0.85cm off 0.30cm")
+plot!(p_two, [NaN], [NaN]; label="SFP", color=:blue, linestyle=:dash, linewidth=1.5, dash_pattern="on 0.25cm off 0.20cm")
+plot!(p_two, [NaN], [NaN]; label="SFP+DIIS", color=:lightblue, linestyle=:solid, linewidth=legend_lw)
+plot!(p_two, [NaN], [NaN]; label="INK", color=:gray, seriestype=:scatter, marker=:+, markerstrokewidth=2, markersize=6)
+plot!(p_two, [NaN], [NaN]; label="PNK", color=:olive, linestyle=:dashdot, linewidth=legend_lw)
 
-hline!(p_two, [tol], color=:magenta, linestyle=:solid, linewidth=5, label=false)
+hline!(p_two, [tol], color=:magenta, linestyle=:dash, linewidth=1.5, label=false)
 
 filtered = filter(y -> isfinite(y) && y > 0, all_series_y)
 if !isempty(filtered)
@@ -209,6 +219,9 @@ if !isempty(filtered)
 else
     plot!(p_two; xlims=(0, max_x * 1.15))
 end
+
+# tighten margins similar to matplotlib tight_layout
+plot!(p_two; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.mm, bottom_margin=0Plots.mm)
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)
