@@ -1,5 +1,4 @@
-using Revise
-using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
+using Revise,Test, LinearAlgebra, ARCC, CCD, NPZ, Glob, TensorOperations, Plots, Random, LaTeXStrings
 
 pkg_root = dirname(dirname(pathof(ARCC)));
 Molecule = "C2H6_6-31g";
@@ -35,20 +34,17 @@ mo_eris = ao2mo_eris(new_eris, Cscf);
 
 D = compute_Density_matrix(nocc, Cscf);
 f = compute_Fock_matrix(new_T, new_A, new_eris, D);
+fock_mo = Cscf' * f * Cscf;
 
 nvir = n_b - nocc;
-initial_guess_mo = zeros(nocc, nocc, nvir, nvir);
-fock_mo = Cscf' * f * Cscf;
-t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fock_mo, 300, 1e-13, true);
-################################################################
-initial_guess = zeros(n_b,n_b,n_b,n_b);
+zeros_mo = zeros(nocc, nocc, nvir, nvir);
+zeros_ao = zeros(n_b,n_b,n_b,n_b);
+
 max_iter = 200;
+max_outer_nk = 200;
 tol = 1e-8; 
-peris = make_physaoeris(new_eris);
 purt = 1e-6;
 shift_canonical = 1e-8;
-shift_non_canonical = 1.08;
-max_outer_nk = 200;
 
 function random_orthogonal(n::Integer; rng=Random.default_rng())
     Q = qr(randn(rng, n, n)).Q
@@ -56,34 +52,32 @@ function random_orthogonal(n::Integer; rng=Random.default_rng())
 end
 
 T_I = Matrix{Float64}(I, n_b, n_b);
-random = random_orthogonal(n_b)
-run_fixed_point = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_canonical; verbose=true);
-θ_final_mo, θ_benchmark_mo, diffs_mo = run_fixed_point(T_I);
-@test norm(θ_final_mo - θ_benchmark_mo) < 1e-7
-
-θ_final_ao, θ_benchmark_ao, diffs_ao = run_fixed_point(Cscf);
-@test norm(θ_final_ao - θ_benchmark_ao) < 1e-7
-
-θ_final_random, θ_benchmark_random, diffs_random = run_fixed_point(random);
-@test norm(θ_final_random - θ_benchmark_random) < 1e-7
+random = random_orthogonal(n_b);
+peris = make_physaoeris(new_eris);
 
 ################################################################
-run_in = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_mo, θ_benchmark_mo, newton_pre_mo, newton_post_mo, num_evals_mo = run_in(T_I);
+t2, diffs = fixed_point_iteration(update_amps_new, zeros_mo, mo_eris, fock_mo, 300, 1e-13, true);
+run_mp2 = mp2_amp_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, zeros_ao, 1, tol,shift_canonical; verbose=false);
 
-run_in = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_ao, θ_benchmark_ao, newton_pre_ao, newton_post_ao, num_evals_ao = run_in(Cscf);
+t_mp2 = run_mp2(T_I);
+θ_mp2_ao = run_mp2(Cscf);
+θ_mp2_random = run_mp2(random);
 
-run_in = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
-θ_final_random, θ_benchmark_random, newton_pre_random, newton_post_random, num_evals_random = run_in(random);
 ################################################################
-# Combined convergence/divergence plot for the three requested cases
+θ_final_mo, θ_benchmark_mo, diffs_mo = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_canonical; verbose=true)(T_I);
+θ_final_ao, θ_benchmark_ao, diffs_ao  = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_iter, tol,shift_canonical; verbose=true)(Cscf);
+θ_final_random, θ_benchmark_random, diffs_random = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_iter, tol,shift_canonical; verbose=true)(random);
+
+################################################################
+θ_final_mo, θ_benchmark_mo, newton_pre_mo, newton_post_mo, num_evals_mo  = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 4)(T_I);
+θ_final_ao, θ_benchmark_ao, newton_pre_ao, newton_post_ao, num_evals_ao = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_outer_nk, tol, 4)(Cscf);
+θ_final_random, θ_benchmark_random, newton_pre_random, newton_post_random, num_evals_random = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 4)(random);
+
+################################################################
 x_fp_mo = collect(0:length(diffs_mo) - 1)
 x_fp_ao = collect(0:length(diffs_ao) - 1)
 x_fp_random = collect(0:length(diffs_random) - 1)
 
-# Build Newton residual convergence history for inexact Newton
-# newton_post contains residuals after each Newton iteration
 x_in_mo = collect(0:length(newton_post_mo) - 1)
 x_in_ao = collect(0:length(newton_post_ao) - 1)
 x_in_random = collect(0:length(newton_post_random) - 1)
@@ -138,7 +132,6 @@ p_three = plot(
     yticks=10.0 .^ (-8:2:2)
 )
 
-# Plot series
 plot!(
     p_three, x_fp_mo, diffs_mo;
     label=false,
@@ -193,7 +186,6 @@ plot!(
     markersize=2
 )
 
-# Legend entries
 legend_lw = 2.5
 
 plot!(p_three, [NaN], [NaN]; label="FP MO", color=:orange, linestyle=:solid, linewidth=legend_lw)

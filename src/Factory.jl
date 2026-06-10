@@ -506,3 +506,21 @@ function mo_only_preconditioned_nk_solver_factory(new_S, t2, nocc, n_b, Cscf, f,
         return θ_final, θ_benchmark, num_residual_evals
     end
 end
+
+# The following factory is corresponding to the mp2 amplitudes.
+
+export mp2_amp_factory
+
+function mp2_amp_factory(new_S, mo, nocc, n_b, Cscf, f, peris, initial_guess, iter, tol,shift_canonical; verbose=false)
+    return function (T)
+        T_I = Matrix{Float64}(I, n_b, n_b);
+        run_fp = fp_iteration_factory(new_S, mo, nocc, n_b, Cscf, f, peris, initial_guess, iter, tol,shift_canonical; verbose=false)
+        t_mp2, _ = run_fp(T_I)
+        Tbar = T_bar(T, new_S)
+        slice = make_slices(Cscf, T, Tbar, nocc, n_b)
+        t_mp2_truncated = t_mp2[1:nocc, 1:nocc, nocc+1:n_b, nocc+1:n_b]
+        θ_mp2 = theta(slice)(t_mp2_truncated)
+        
+        return θ_mp2
+    end
+end

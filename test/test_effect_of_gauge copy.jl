@@ -1,4 +1,4 @@
-using Revise,Test, LinearAlgebra, ARCC, CCD, NPZ, Glob, TensorOperations, Plots, Random, LaTeXStrings
+using Revise,Test, LinearAlgebra, ARCC, CCD, NPZ, Glob, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
 Molecule = "C2H6_6-31g";
@@ -34,47 +34,52 @@ mo_eris = ao2mo_eris(new_eris, Cscf);
 
 D = compute_Density_matrix(nocc, Cscf);
 f = compute_Fock_matrix(new_T, new_A, new_eris, D);
-fock_mo = Cscf' * f * Cscf;
 
 nvir = n_b - nocc;
-zeros_mo = zeros(nocc, nocc, nvir, nvir);
-zeros_ao = zeros(n_b,n_b,n_b,n_b);
-
+initial_guess_mo = zeros(nocc, nocc, nvir, nvir);
+fock_mo = Cscf' * f * Cscf;
+t2, diffs = fixed_point_iteration(update_amps_new, initial_guess_mo, mo_eris, fock_mo, 300, 1e-13, true);
+################################################################
+initial_guess = zeros(n_b,n_b,n_b,n_b);
 max_iter = 200;
-max_outer_nk = 200;
 tol = 1e-8; 
+peris = make_physaoeris(new_eris);
 purt = 1e-6;
 shift_canonical = 1e-8;
+shift_non_canonical = 1.08;
+max_outer_nk = 200;
 
-function random_orthogonal(n::Integer; rng=Random.default_rng())
-    Q = qr(randn(rng, n, n)).Q
-    return Matrix(Q)
-end
+# Here, I run mp2 and initialize amplitudes with it.
 
-T_I = Matrix{Float64}(I, n_b, n_b);
-random = random_orthogonal(n_b);
-peris = make_physaoeris(new_eris);
-
-################################################################
-t2, diffs = fixed_point_iteration(update_amps_new, zeros_mo, mo_eris, fock_mo, 300, 1e-13, true);
-run_mp2 = mp2_amp_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, zeros_ao, 1, tol,shift_canonical; verbose=false);
-
+run_mp2 = mp2_amp_factory(new_S, initial_guess_mo, nocc, n_b, Cscf, f, peris, initial_guess, 1, tol,shift_canonical; verbose=false);
 t_mp2 = run_mp2(T_I);
 θ_mp2_ao = run_mp2(Cscf);
 θ_mp2_random = run_mp2(random);
 
-################################################################
-θ_final_mo, θ_benchmark_mo, diffs_mo = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_canonical; verbose=true)(T_I);
-θ_final_ao, θ_benchmark_ao, diffs_ao  = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_iter, tol,shift_canonical; verbose=true)(Cscf);
-θ_final_random, θ_benchmark_random, diffs_random = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_iter, tol,shift_canonical; verbose=true)(random);
+T_I = Matrix{Float64}(I, n_b, n_b);
+function random_orthogonal(n::Integer; rng=Random.default_rng())
+    Q = qr(randn(rng, n, n)).Q
+    return Matrix(Q)
+end
+random = random_orthogonal(n_b);
 
-################################################################
-θ_final_mo, θ_benchmark_mo, newton_pre_mo, newton_post_mo, num_evals_mo  = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 4)(T_I);
-θ_final_ao, θ_benchmark_ao, newton_pre_ao, newton_post_ao, num_evals_ao = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_outer_nk, tol, 4)(Cscf);
-θ_final_random, θ_benchmark_random, newton_pre_random, newton_post_random, num_evals_random = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 4)(random);
+run_fixed_point_mo = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_canonical; verbose=true);
+θ_final_mo, θ_benchmark_mo, diffs_mo = run_fixed_point_mo(T_I);
 
+run_fixed_point_ao = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_iter, tol,shift_canonical; verbose=true);
+θ_final_ao, θ_benchmark_ao, diffs_ao = run_fixed_point_ao(Cscf);
+
+run_fixed_point_random = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_iter, tol,shift_canonical; verbose=true);
+θ_final_random, θ_benchmark_random, diffs_random = run_fixed_point_random(random);
 ################################################################
-θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 5, 25)(random);
+run_in_mo = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 5);
+θ_final_mo, θ_benchmark_mo, newton_pre_mo, newton_post_mo, num_evals_mo = run_in_mo(T_I);
+
+run_in_ao = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_ao, max_outer_nk, tol, 5);
+θ_final_ao, θ_benchmark_ao, newton_pre_ao, newton_post_ao, num_evals_ao = run_in_ao(Cscf);
+
+run_in_random = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 5);
+θ_final_random, θ_benchmark_random, newton_pre_random, newton_post_random, num_evals_random = run_in_random(random);
 ################################################################
 # Combined convergence/divergence plot for the three requested cases
 x_fp_mo = collect(0:length(diffs_mo) - 1)
@@ -87,17 +92,6 @@ x_in_mo = collect(0:length(newton_post_mo) - 1)
 x_in_ao = collect(0:length(newton_post_ao) - 1)
 x_in_random = collect(0:length(newton_post_random) - 1)
 
-gmres_counts_pnk = [length(residuals) for residuals in gmres_residuals_pnk]
-x_pnk = vcat(0, cumsum(1 .+ gmres_counts_pnk))
-r0_pnk = if !isempty(newton_pre_pnk) && isfinite(newton_pre_pnk[1]) && newton_pre_pnk[1] > 0
-    newton_pre_pnk[1]
-elseif !isempty(newton_post_pnk) && isfinite(newton_post_pnk[1]) && newton_post_pnk[1] > 0
-    newton_post_pnk[1]
-else
-    1.0
-end
-y_pnk = vcat([r0_pnk], newton_post_pnk)
-
 all_series_y = Float64[]
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_mo))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_ao))
@@ -105,7 +99,6 @@ append!(all_series_y, filter(y -> isfinite(y) && y > 0, diffs_random))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, newton_post_mo))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, newton_post_ao))
 append!(all_series_y, filter(y -> isfinite(y) && y > 0, newton_post_random))
-append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_pnk))
 
 max_x = maximum((
     length(diffs_mo),
@@ -113,11 +106,9 @@ max_x = maximum((
     length(diffs_random),
     length(newton_post_mo),
     length(newton_post_ao),
-    length(newton_post_random),
-    maximum(x_pnk)
+    length(newton_post_random)
 ))
 
-# Figure styling (target ~0.5\textwidth) and unified fonts
 text_pt = 11
 
 figure_width = 420
@@ -142,7 +133,6 @@ p_three = plot(
     ytickfontfamily="Computer Modern",
     legendfontsize=text_pt,
     legendfontfamily="Computer Modern",
-    legend_marker_scale=0.35,
     titlefontsize=text_pt,
     titlefontfamily="Computer Modern",
     top_margin=0Plots.mm,
@@ -152,6 +142,7 @@ p_three = plot(
     yticks=10.0 .^ (-8:2:2)
 )
 
+# Plot series
 plot!(
     p_three, x_fp_mo, diffs_mo;
     label=false,
@@ -181,9 +172,9 @@ plot!(
     label=false,
     color=:gray,
     seriestype=:scatter,
-    marker=:cross,
-    markerstrokewidth=4,
-    markersize=4
+    marker=:+,
+    markerstrokewidth=2,
+    markersize=6
 )
 
 plot!(
@@ -206,24 +197,15 @@ plot!(
     markersize=2
 )
 
-plot!(
-    p_three, x_pnk, y_pnk;
-    label=false,
-    color=:pink,
-    linestyle=:dot,
-    linewidth=2.5
-)
-
-# Proxy legend entries
+# Legend entries
 legend_lw = 2.5
 
 plot!(p_three, [NaN], [NaN]; label="FP MO", color=:orange, linestyle=:solid, linewidth=legend_lw)
-plot!(p_three, [NaN], [NaN]; label="INK MO", color=:gray, seriestype=:scatter, marker=:cross, markerstrokewidth=4, markersize=4)
+plot!(p_three, [NaN], [NaN]; label="INK MO", color=:gray, seriestype=:scatter, marker=:+, markerstrokewidth=2, markersize=4)
 plot!(p_three, [NaN], [NaN]; label="FP AO", color=:darkgreen, linestyle=:dash, linewidth=1.8)
 plot!(p_three, [NaN], [NaN]; label="INK AO", color=:brown, seriestype=:scatter, marker=:x, markerstrokewidth=3, markersize=4)
 plot!(p_three, [NaN], [NaN]; label="FP Ra", color=:lightgreen, linestyle=:dashdot, linewidth=legend_lw)
 plot!(p_three, [NaN], [NaN]; label="INK Ra", color=:black, seriestype=:scatter, marker=:pixel, markerstrokewidth=2, markersize=2)
-plot!(p_three, [NaN], [NaN]; label="PNK Ra", color=:pink, linestyle=:dot, linewidth=legend_lw)
 
 hline!(p_three, [tol], color=:magenta, linestyle=:dash, linewidth=1.5, label=false)
 
@@ -240,8 +222,8 @@ plot!(p_three; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
 isdir(fig_dir) || mkpath(fig_dir)
-pdf_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule)_with_pnk.pdf")
-svg_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule)_with_pnk.svg")
+pdf_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule).pdf")
+svg_three = joinpath(fig_dir, "effect_of_gauge_$(Molecule).svg")
 
 savefig(p_three, pdf_three)
 savefig(p_three, svg_three)

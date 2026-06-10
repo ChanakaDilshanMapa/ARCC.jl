@@ -55,13 +55,31 @@ function random_orthogonal(n::Integer; rng=Random.default_rng())
 end
 
 T_I = Matrix{Float64}(I, n_b, n_b);
-random = random_orthogonal(n_b)
+random = random_orthogonal(n_b);
+
+function mp2_amp_factory(new_S, initial_guess_mo, nocc, n_b, Cscf, f, peris, initial_guess, iter, tol,shift_canonical; verbose=false)
+    return function (T)
+        T_I = Matrix{Float64}(I, n_b, n_b);
+        run_fp = fp_iteration_factory(new_S, initial_guess_mo, nocc, n_b, Cscf, f, peris, initial_guess, iter, tol,shift_canonical; verbose=false)
+        t_mp2, _ = run_fp(T_I)
+        Tbar = T_bar(T, new_S)
+        slice = make_slices(Cscf, T, Tbar, nocc, n_b)
+        t_mp2_truncated = t_mp2[1:nocc, 1:nocc, nocc+1:n_b, nocc+1:n_b]
+        θ_mp2 = theta(slice)(t_mp2_truncated)
+        
+        return θ_mp2
+    end
+end
+
+run_mp2 = mp2_amp_factory(new_S, initial_guess_mo, nocc, n_b, Cscf, f, peris, initial_guess, 1, tol,shift_canonical; verbose=false);
+
+θ_mp2_random = run_mp2(random);
 ################################################################
-run_nk = nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
+run_nk = nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 5);
 θ_final_nk, θ_benchmark_nk, newton_pre_nk, newton_post_nk, gmres_residuals_nk, num_evals_nk = run_nk(random);
 @test norm(θ_final_nk - θ_benchmark_nk) < 1e-7
 
-run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
+run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, θ_mp2_random, max_outer_nk, tol, 15, 30);
 θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = run_pnk(random);
 @test norm(θ_final_pnk - θ_benchmark_pnk) < 1e-7
 ################################################################

@@ -14,8 +14,7 @@ function preconditioned_nk_solver_with_logs(
     max_outer=300,
     m=5,
     m_p = 10,
-    verbose=true,
-    η=0.1
+    verbose=true
 )
 
     θ_shape = size(θ)
@@ -23,9 +22,15 @@ function preconditioned_nk_solver_with_logs(
 
     num_residual_evals = Ref(0)
 
+
     function vec_residual(θ_vec::Vector{Float64})
         θ_tensor = reshape(θ_vec, θ_shape)
         num_residual_evals[] += 1
+        return vec(residual_fun(θ_tensor))
+    end
+
+    function vec_residual_nocount(θ_vec::Vector{Float64})
+        θ_tensor = reshape(θ_vec, θ_shape)
         return vec(residual_fun(θ_tensor))
     end
 
@@ -34,6 +39,41 @@ function preconditioned_nk_solver_with_logs(
         return (vec_residual(θ_vec .+ δ .* v) .- r) ./ δ
     end
 
+    # function update_eta(r_new, r_old; η_min=1e-7, η_max=1.0)
+    #     if r_old == 0
+    #         return 0.1
+    #     end
+
+    #     ratio = r_new / r_old
+
+    #     η_new = min(0.018,(ratio)^2)
+    #     η_new = max(η_new, η_min)
+
+    #     return clamp(η_new, η_min, η_max)
+    # end
+
+    # function update_eta(r_new, r_old; η_prev=0.1, γ=0.9, η_max=1, η_min=1e-8)
+    #     if r_old == 0
+    #         return 0.1
+    #     end
+        
+    #     ratio = r_new / r_old
+
+    #     if r_new > 1e-3  
+    #         η_new = 0.5 * ratio  
+    #         # η_new = 0.5 * ratio^2  
+    #     else
+    #         η_new = 0.001 * ratio^2 
+    #     end
+
+    #     η_new = clamp(η_new, η_min, 0.5) 
+    
+    #     if η_new > η_prev
+    #         η_new = min(η_prev, 0.1)  
+    #     end
+        
+    #     return η_new
+    # end
     θ_vec = vec(copy(θ))
     r = vec_residual(θ_vec)
 
@@ -77,22 +117,16 @@ function preconditioned_nk_solver_with_logs(
     p_inv_r = apply_Pinv(r)
     normr = norm(p_inv_r)
 
-    # verbose && println("NK: initial ||P⁻¹r|| = $normr")
-
     newton_residuals_pre  = Float64[]
     newton_residuals_post = Float64[]
     gmres_residuals       = Vector{Vector{Float64}}()
-
-    # push!(newton_residuals_pre, normr)
     push!(newton_residuals_pre, true_residual_norm)
 
     k = 0
     total_inner = 0
-
+    η = 0.5
 
     while true_residual_norm > tol && k < max_outer
-    # while normr > tol && k < max_outer
-
         β = normr
         V = zeros(n, m+1)
         H = zeros(m+1, m)
@@ -112,12 +146,11 @@ function preconditioned_nk_solver_with_logs(
                 normJ = norm(Jv_val)
                 βJ = normJ
 
-                VJ = zeros(n, m+1)
-                HJ = zeros(m+1, m)
-
+                VJ = zeros(n, m_p+1)
+                HJ = zeros(m_p+1, m_p)
                 VJ[:,1] .= Jv_val / βJ
 
-                for jj = 1:m
+                for jj = 1:m_p
                     wJ = P_inv_action(fop, θ_shape, VJ[:,jj])
 
                     for ii = 1:jj
@@ -174,6 +207,11 @@ function preconditioned_nk_solver_with_logs(
             push!(gmres_current, resid_inner)
             verbose && println("  GMRES $j: projected residual = $resid_inner")
 
+            if resid_inner <= tol
+                verbose && println("  GMRES converged to absolute tolerance")
+                break
+            end
+
             if resid_inner <= η * β
                 verbose && println("  GMRES stopping criterion satisfied")
                 break
@@ -191,14 +229,39 @@ function preconditioned_nk_solver_with_logs(
         e1 = zeros(jmax+1); e1[1] = β
 
         s = Hj \ e1
+        ###############
         Δθ = -V[:,1:jmax] * s
-
+        old_residual_norm = true_residual_norm
         θ_vec .+= Δθ
-
         r = vec_residual(θ_vec)
+        p_inv_r = apply_Pinv(r)
+        normr = norm(p_inv_r)
+        # Rk_norm = norm(apply_Pinv(Jv(θ_vec, r, Δθ)) + apply_Pinv(r))
+        # Rk_norm = norm(Jv(θ_vec, r, Δθ) + r)
+        # Rk_norm = normr
+        Rk_norm = norm(e1 - Hj*s)
 
         true_residual_norm = norm(r)
-        p_inv_r = apply_Pinv(r)
+
+        α = 2
+
+        η = Rk_norm /
+            (Rk_norm +
+            α * (old_residual_norm - true_residual_norm))
+
+        η = clamp(η, 1e-8, 0.99)
+
+        verbose && println("  Updated η = $η")
+        ###############
+
+        # r = vec_residual(θ_vec)
+
+        # true_residual_norm = norm(r)
+
+        # η = update_eta(true_residual_norm, old_residual_norm)
+
+        # verbose && println("  Updated η = $η")
+
         normr = norm(p_inv_r)
 
         push!(newton_residuals_post, true_residual_norm)
@@ -210,7 +273,7 @@ function preconditioned_nk_solver_with_logs(
         k += 1
     end
 
-   if true_residual_norm <= tol
+    if true_residual_norm <= tol
         verbose && println("Converged in $k Newton and $total_inner GMRES iterations.")
     else
         verbose && println("Did NOT converge in $k Newton and $total_inner GMRES iterations.")

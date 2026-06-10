@@ -12,7 +12,6 @@ function inexact_newton(
 )
 
     θ_shape = size(θ)
-    println("θ_shape: ", θ_shape)
     n = prod(θ_shape)
 
     num_residual_evals = Ref(0)
@@ -71,12 +70,8 @@ function inexact_newton(
             e1 = zeros(j+1); e1[1] = β
             resid_inner = norm(e1 - Hj * (Hj \ e1))
 
-            verbose && println("  GMRES $j: inner = $resid_inner")
+            # verbose && println("  GMRES $j: inner = $resid_inner")
 
-            # if resid_inner <= η * β
-            #     verbose && println("  GMRES stopping criterion satisfied: $resid_inner <= $(η * β)")
-            #     break
-            # end
         end
 
         Hj = H[1:jmax+1, 1:jmax]

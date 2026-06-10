@@ -61,19 +61,24 @@ rho_min_cont = Optim.minimum(res_opt)
 shift_non_canonical = eps_min_cont
 
 T_I = Matrix{Float64}(I, n_b, n_b);
-run_ink = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
+
+run_mp2 = mp2_amp_factory(new_S, initial_guess_mo, nocc, n_b, Cscf, f, peris, initial_guess, 1, tol,shift_canonical; verbose=false);
+
+t_mp2 = run_mp2(T_I);
+
+run_ink = inexact_newton_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 5);
 θ_final_ink, θ_benchmark_ink, newton_pre_ink, newton_post_ink, num_evals_ink = run_ink(T_I);
 @test norm(θ_final_ink - θ_benchmark_ink) < 1e-7
 
-run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_outer_nk, tol, 5);
+run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 15, 30);
 θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = run_pnk(T_I);
 @test norm(θ_final_pnk - θ_benchmark_pnk) < 1e-7
 
-run_sfp = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol,shift_non_canonical; verbose=true);
+run_sfp = fp_iteration_factory(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_non_canonical; verbose=true);
 θ_final_sfp, θ_benchmark_sfp, diffs_sfp = run_sfp(T_I);
 @test norm(θ_final_sfp - θ_benchmark_sfp) < 1e-7
 
-run_sfp_plus_diis = fp_iteration_factory_diis(new_S, t2, nocc, n_b, Cscf, f, peris, initial_guess, max_iter, tol, shift_non_canonical, 5; verbose=true);
+run_sfp_plus_diis = fp_iteration_factory_diis(new_S, t2, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol, shift_non_canonical, 5; verbose=true);
 θ_final_sfp_plus_diss, θ_benchmark_sfp_plus_diss, diffs_sfp_plus_diss_raw = run_sfp_plus_diis(T_I);
 @test norm(θ_final_sfp_plus_diss - θ_benchmark_sfp_plus_diss) < 1e-7
 

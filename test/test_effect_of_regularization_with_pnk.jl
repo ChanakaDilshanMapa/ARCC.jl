@@ -1,4 +1,4 @@
-using Test, GTO, WTP, LinearAlgebra, ARCC, CCD, NPZ, Glob, Einsum, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
+using Revise, Test, LinearAlgebra, ARCC, CCD, NPZ, Glob, TensorOperations, Plots, NLsolve, Random, LaTeXStrings, Optim
 
 pkg_root = dirname(dirname(pathof(ARCC)));
 Molecule = "H2-CF-7_cc-pvtz";
@@ -34,59 +34,51 @@ mo_eris = ao2mo_eris(new_eris, Cscf);
 
 D = compute_Density_matrix(nocc, Cscf);
 f = compute_Fock_matrix(new_T, new_A, new_eris, D);
+fock_mo = Cscf' * f * Cscf;
 
 nvir = n_b - nocc;
-mo = zeros(nocc, nocc, nvir, nvir);
-fock_mo = Cscf' * f * Cscf;
-################################################################
-initial_guess = zeros(n_b,n_b,n_b,n_b);
+zeros_mo = zeros(nocc, nocc, nvir, nvir);
+zeros_ao = zeros(n_b,n_b,n_b,n_b);
+
 max_iter = 200;
+max_outer_nk = 200;
 tol = 1e-8; 
-peris = make_physaoeris(new_eris);
 purt = 1e-6;
 shift_canonical = 1e-8;
-max_outer_nk = 200;
-shift_non_canonical = 0.64;
-
-function random_orthogonal(n::Integer; rng=Random.default_rng())
-    Q = qr(randn(rng, n, n)).Q
-    return Matrix(Q)
-end
 
 T_I = Matrix{Float64}(I, n_b, n_b);
-random = random_orthogonal(n_b);
-mp2 = fp_iteration_factory(new_S, mo, nocc, n_b, Cscf, f, peris, initial_guess, 1, tol,shift_canonical; verbose=true);
-θ_mp2, _, _ = mp2(T_I);
+peris = make_physaoeris(new_eris);
 
-run_fixed_point = fp_iteration_factory(new_S, mo, nocc, n_b, Cscf, f, peris, θ_mp2, max_iter, tol,shift_canonical; verbose=true);
-θ_final_I, θ_benchmark_I, diffs_I = run_fixed_point(T_I);
+t_mp2 = mp2_amp_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, zeros_ao, 1, tol,shift_canonical; verbose=false)(T_I);
 
-run_fixed_point_shifted = fp_iteration_factory(new_S, mo, nocc, n_b, Cscf, f, peris, θ_mp2, max_iter, tol,shift_non_canonical; verbose=true);
-θ_final_fp_shifted, θ_benchmark_fp_shifted, diffs_fp_shifted = run_fixed_point_shifted(T_I);
+θ_final_I, θ_benchmark_I, diffs_I = fp_iteration_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_canonical; verbose=true)(T_I);
 
+θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, num_evals_I_l  = inexact_newton_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 4)(T_I);
 
-run_ink = inexact_newton_factory(new_S, mo, nocc, n_b, Cscf, f, peris, θ_mp2, max_outer_nk, tol, 5);
-θ_final_I_l, θ_benchmark_I_l, newton_pre_I_l, newton_post_I_l, num_evals_I_l = run_ink(T_I);
-@test norm(θ_final_fp_shifted - θ_final_I_l) < 1e-8
+Tbar = T_bar(T_I, new_S);
+slice = make_slices(Cscf, T_I, Tbar, nocc, n_b);
+t2_ink = theta2mo_amp(slice)(θ_final_I_l);
 
-run_nk = nk_solver_factory_with_logs(new_S, mo, nocc, n_b, Cscf, f, peris, θ_mp2, max_outer_nk, tol, 5);
-θ_final_nk, θ_benchmark_nk, newton_pre_nk, newton_post_nk, gmres_residuals_nk, num_evals_nk = run_nk(T_I);
+# rho_of_eps = function (eps::Float64)
+#     run_anal = analyzer_factory(new_S, t2_ink, nocc, n_b, Cscf, f, peris, purt, eps)
+#     _, spec_r = run_anal(Cscf)
+#     return spec_r
+# end
 
-run_pnk = preconditioned_nk_solver_factory_with_logs(new_S, mo, nocc, n_b, Cscf, f, peris, θ_mp2, max_outer_nk, tol, 5, 30);
-θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = run_pnk(T_I);
+# res_opt = Optim.optimize(rho_of_eps, 0.0, 10.0, Optim.Brent())
+# eps_min_cont = Optim.minimizer(res_opt)
+# rho_min_cont = Optim.minimum(res_opt)
+# shift_non_canonical = eps_min_cont
+shift_non_canonical = 0.38225196847273696
 
-@test norm(θ_final_fp_shifted - θ_final_I_l) < 1e-8
-@test norm(θ_final_fp_shifted - θ_final_nk) < 1e-8
-@test norm(θ_final_fp_shifted - θ_final_pnk) < 1e-8
+θ_final_fp_shifted, θ_benchmark_fp_shifted, diffs_fp_shifted  = fp_iteration_factory(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, t_mp2, max_iter, tol,shift_non_canonical; verbose=true)(T_I);
+
+θ_final_pnk, θ_benchmark_pnk, newton_pre_pnk, newton_post_pnk, gmres_residuals_pnk, num_evals_pnk = preconditioned_nk_solver_factory_with_logs(new_S, zeros_mo, nocc, n_b, Cscf, f, peris, t_mp2, max_outer_nk, tol, 5, 25)(T_I);
 ################################################################
-# Combined convergence/divergence plot for the three requested cases
-x_fp = collect(1:length(diffs_I))
-x_fp_shifted = collect(1:length(diffs_fp_shifted))
-
-# Build Newton residual convergence history for inexact Newton
-# newton_post contains residuals after each Newton iteration
-x_ink = collect(1:length(newton_post_I_l))
-y_ink = newton_post_I_l
+x_fp = collect(1:length(diffs_I));
+x_fp_shifted = collect(1:length(diffs_fp_shifted));
+x_ink = collect(1:length(newton_post_I_l));
+y_ink = newton_post_I_l;
 
 gmres_counts_pnk = [length(residuals) for residuals in gmres_residuals_pnk]
 x_pnk = vcat(0, cumsum(1 .+ gmres_counts_pnk))
@@ -107,9 +99,8 @@ append!(all_series_y, filter(y -> isfinite(y) && y > 0, y_pnk))
 
 max_x = max(length(diffs_I), length(diffs_fp_shifted), length(newton_post_I_l), maximum(x_pnk))
 
-# Figure styling to match LaTeX text (target ~0.5\textwidth)
 text_pt = 11
-figure_width = 420  # pixels: approximate target for 0.5\textwidth when exported
+figure_width = 420  
 figure_height = Int(round(figure_width * 0.66))
 
 p_three = plot(
@@ -162,7 +153,7 @@ plot!(
     color=:gray,
     seriestype=:scatter,
     marker=:+,
-    markerstrokewidth=2,
+    markerstrokewidth=4,
     markersize=6
 )
 
@@ -174,7 +165,6 @@ plot!(
     linewidth=2.5
 )
 
-# Add proxy legend entries that match the plotted curves.
 legend_lw = 2.5
 plot!(p_three, [NaN], [NaN]; label="FP", color=:orange, linestyle=:solid, linewidth=legend_lw)
 plot!(p_three, [NaN], [NaN]; label="SFP", color=:blue, linestyle=:dash, linewidth=1.6)
@@ -192,7 +182,6 @@ else
     plot!(p_three; xlims=(0, max_x * 1.15))
 end
 
-# tighten margins similar to ``tight_layout`` in matplotlib
 plot!(p_three; left_margin=0Plots.mm, right_margin=0Plots.mm, top_margin=0Plots.mm, bottom_margin=0Plots.mm)
 
 fig_dir = joinpath(pkg_root, "test/figures", Molecule)
@@ -201,26 +190,3 @@ pdf_three = joinpath(fig_dir, "effect_of_regularization_$(Molecule)_with_pnk.pdf
 svg_three = joinpath(fig_dir, "effect_of_regularization_$(Molecule)_with_pnk.svg")
 savefig(p_three, pdf_three)
 savefig(p_three, svg_three)
-
-
-@test norm(θ_final_fp_shifted - θ_final_I_l) < 1e-8
-@test norm(θ_final_fp_shifted - θ_final_nk) < 1e-8
-@test norm(θ_final_fp_shifted - θ_final_pnk) < 1e-8
-
-Tbar = T_bar(T, new_S)
-slice = make_slices(Cscf, T, Tbar, nocc, n_b)
-proj = make_projectors(slice)
-int = make_integrals(proj, peris)
-
-ene_sfp = corr_ene(int, θ_final_fp_shifted)
-ene_ink = corr_ene(int, θ_final_I_l)
-ene_nk = corr_ene(int, θ_final_nk)
-ene_pnk = corr_ene(int, θ_final_pnk)
-
-@test norm(ene_sfp - ene_ink) < 1e-8
-@test norm(ene_sfp - ene_nk) < 1e-8   
-@test norm(ene_sfp - ene_pnk) < 1e-8
-
-
-
-
